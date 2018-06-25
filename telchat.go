@@ -10,6 +10,7 @@ import (
 	"github.com/Pallinder/go-randomdata"
 )
 
+// Used https://github.com/kljensen/golang-chat as an example
 func main() {
 
 	// Number of people whom ever connected
