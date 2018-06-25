@@ -12,9 +12,7 @@ import (
 	"github.com/jwenz723/telchat/clientmap"
 )
 
-
-
-// Used https://github.com/kljensen/golang-chat as an example
+// Used as an example: https://github.com/kljensen/golang-chat
 func main() {
 	// Contains a reference to all connected clients
 	allClients := clientmap.NewClientMap()
@@ -25,10 +23,8 @@ func main() {
 	// Channel into which we'll push dead connections for removal from allClients.
 	deadConnections := make(chan net.Conn)
 
-	// Channel into which we'll push messages from
-	// connected clients so that we can broadcast them
-	// to every connection in allClients.
-	messages := make(chan string, 1)
+	// Channel into which messages from clients will be pushed to be broadcast to other clients
+	messages := make(chan string)
 
 	// Start the TCP server
 	server, err := net.Listen("tcp", ":6000")
@@ -109,9 +105,6 @@ func main() {
 				for conn := range ic {
 					go func(conn net.Conn, message string) {
 						_, err := conn.Write([]byte(message))
-
-						// If there was an error communicating
-						// with them, the connection is dead.
 						if err != nil {
 							deadConnections <- conn
 						}
@@ -127,10 +120,12 @@ func main() {
 
 		// Remove dead clients
 		case conn := <-deadConnections:
-			m := fmt.Sprintf("%v %v disconnected\r\n", time.Now().Format("15:04:05"), allClients.GetValue(conn))
-			messages <- m
-			log.Printf(m)
-			allClients.DeleteKey(conn)
+			go func() {
+				m := fmt.Sprintf("%v %v disconnected\r\n", time.Now().Format("15:04:05"), allClients.GetValue(conn))
+				messages <- m
+				log.Printf(m)
+				allClients.DeleteKey(conn)
+			}()
 		}
 	}
 }
