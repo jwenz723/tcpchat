@@ -1,0 +1,5 @@
+.idea/*
+config.yml
+*.exe
+*.png
+logs/*
