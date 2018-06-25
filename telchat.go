@@ -8,31 +8,27 @@ import (
 	"os"
 	"time"
 	"github.com/Pallinder/go-randomdata"
+	"strings"
+	"github.com/jwenz723/telchat/clientmap"
 )
+
+
 
 // Used https://github.com/kljensen/golang-chat as an example
 func main() {
+	// Contains a reference to all connected clients
+	allClients := clientmap.NewClientMap()
 
-	// Number of people whom ever connected
-	clientCount := 0
-
-	// All people who are connected; a map wherein
-	// the keys are net.Conn objects and the values
-	// are client "ids", an integer.
-	allClients := make(map[net.Conn]string)
-
-	// Channel into which the TCP server will push
-	// new connections.
+	// Channel into which the TCP server will push new connections.
 	newConnections := make(chan net.Conn)
 
-	// Channel into which we'll push dead connections
-	// for removal from allClients.
+	// Channel into which we'll push dead connections for removal from allClients.
 	deadConnections := make(chan net.Conn)
 
 	// Channel into which we'll push messages from
 	// connected clients so that we can broadcast them
 	// to every connection in allClients.
-	messages := make(chan string)
+	messages := make(chan string, 1)
 
 	// Start the TCP server
 	server, err := net.Listen("tcp", ":6000")
@@ -54,77 +50,87 @@ func main() {
 		}
 	}()
 
-	// Loop endlessly
 	for {
-
-		// Handle 1) new connections; 2) dead connections;
-		// and, 3) broadcast messages.
 		select {
 
 		// Accept new clients
 		case conn := <-newConnections:
+			allClients.Write(conn, randomdata.SillyName())
 
-			log.Printf("Accepted new client, #%d", clientCount)
-
-			// Add this connection to the `allClients` map
-			allClients[conn] = randomdata.SillyName()
-			clientCount += 1
-
-			// Constantly read incoming messages from this
-			// client in a goroutine and push those onto
-			// the messages channel for broadcast to others.
-			go func(conn net.Conn, name string) {
-				_, err := conn.Write([]byte(fmt.Sprintf("welcome %v\r\n", name)))
-
-				// If there was an error communicating
-				// with them, the connection is dead.
+			go func(conn net.Conn) {
+				allClients.RLock()
+				_, err := conn.Write([]byte(fmt.Sprintf("Enter your name (default: %v)\r\n", allClients.GetValue(conn))))
+				allClients.RUnlock()
 				if err != nil {
 					deadConnections <- conn
 					return
 				}
 
 				reader := bufio.NewReader(conn)
+				incoming, err := reader.ReadString('\n')
+				if err != nil {
+					deadConnections <- conn
+					return
+				}
+
+				incoming = strings.Replace(incoming, "\n", "", -1)
+				incoming = strings.Replace(incoming, "\r", "", -1)
+				if incoming != "" {
+					allClients.Write(conn, incoming)
+				}
+
+				name := allClients.GetValue(conn)
+				_, err = conn.Write([]byte(fmt.Sprintf("Welcome to telchat %v\r\n", name)))
+				if err != nil {
+					deadConnections <- conn
+					return
+				}
+
+				m := fmt.Sprintf("%v %v joined\r\n", time.Now().Format("15:04:05"), name)
+				messages <- m
+				log.Printf(m)
+
 				for {
 					incoming, err := reader.ReadString('\n')
 					if err != nil {
 						break
 					}
 
-					s := time.Now().Format("15:04:05")
-					messages <- fmt.Sprintf("%v %v: %s", s, name, incoming)
+					messages <- fmt.Sprintf("%v %v: %s", time.Now().Format("15:04:05"), name, incoming)
 				}
 
-				// When we encouter `err` reading, send this
-				// connection to `deadConnections` for removal.
 				deadConnections <- conn
-
-			}(conn, allClients[conn])
+			}(conn)
 
 		// Accept messages from connected clients
 		case message := <-messages:
+			ic := make(chan net.Conn)
+			go func() {
+				for conn := range ic {
+					go func(conn net.Conn, message string) {
+						_, err := conn.Write([]byte(message))
 
-			// Loop over all connected clients
-			for conn, _ := range allClients {
+						// If there was an error communicating
+						// with them, the connection is dead.
+						if err != nil {
+							deadConnections <- conn
+						}
+					}(conn, message)
+				}
+			}()
 
-				// Send them a message in a go-routine
-				// so that the network operation doesn't block
-				go func(conn net.Conn, message string) {
-					_, err := conn.Write([]byte(message))
-
-					// If there was an error communicating
-					// with them, the connection is dead.
-					if err != nil {
-						deadConnections <- conn
-					}
-				}(conn, message)
+			if err := allClients.IterateMapKeys(ic); err != nil {
+				fmt.Println(err)
 			}
-			log.Printf("New message: %s", message)
-			log.Printf("Broadcast to %d clients", len(allClients))
+
+			log.Printf("New message broadcast to %d clients: %s", allClients.Length(), message)
 
 		// Remove dead clients
 		case conn := <-deadConnections:
-			log.Printf("Client %v disconnected", allClients[conn])
-			delete(allClients, conn)
+			m := fmt.Sprintf("%v %v disconnected\r\n", time.Now().Format("15:04:05"), allClients.GetValue(conn))
+			messages <- m
+			log.Printf(m)
+			allClients.DeleteKey(conn)
 		}
 	}
 }
