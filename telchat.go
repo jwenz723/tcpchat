@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"net"
 	"os"
 	"time"
-	"github.com/Pallinder/go-randomdata"
 	"strings"
 	"github.com/jwenz723/telchat/clientmap"
 	"path/filepath"
@@ -32,12 +30,12 @@ func main() {
 	}
 
 	// Contains a reference to all connected clients
-	allClients := clientmap.NewClientMap()
+	clients := clientmap.NewClientMap()
 
 	// Channel into which the TCP server will push new connections.
 	newConnections := make(chan net.Conn)
 
-	// Channel into which we'll push dead connections for removal from allClients.
+	// Channel into which we'll push dead connections for removal from clients.
 	deadConnections := make(chan net.Conn)
 
 	// Channel into which messages from clients will be pushed to be broadcast to other clients
@@ -58,99 +56,39 @@ func main() {
 
 	// Tell the server to accept connections forever
 	// and push new connections into the newConnections channel.
-	go func() {
-		for {
-			conn, err := server.Accept()
-			if err != nil {
-				log.WithField("error", err).Fatal("error accepting connection")
-			}
-			newConnections <- conn
-		}
-	}()
+	go AcceptIncomingConnections(server, newConnections)
 
 	for {
 		select {
 
 		// Accept new clients
 		case conn := <-newConnections:
-			allClients.Write(conn, randomdata.SillyName())
-
-			go func(conn net.Conn) {
-				allClients.RLock()
-				_, err := conn.Write([]byte(fmt.Sprintf("Enter your name (default: %v)\r\n", allClients.GetValue(conn))))
-				allClients.RUnlock()
-				if err != nil {
-					deadConnections <- conn
-					return
-				}
-
-				reader := bufio.NewReader(conn)
-				incoming, err := reader.ReadString('\n')
-				if err != nil {
-					deadConnections <- conn
-					return
-				}
-
-				incoming = strings.Replace(incoming, "\n", "", -1)
-				incoming = strings.Replace(incoming, "\r", "", -1)
-				if incoming != "" {
-					allClients.Write(conn, incoming)
-				}
-
-				name := allClients.GetValue(conn)
-				_, err = conn.Write([]byte(fmt.Sprintf("Welcome to telchat %v\r\n", name)))
-				if err != nil {
-					deadConnections <- conn
-					return
-				}
-
-				messages <- fmt.Sprintf("%v joined\r\n", name)
-
-				for {
-					incoming, err := reader.ReadString('\n')
-					if err != nil {
-						break
-					}
-
-					messages <- fmt.Sprintf("%v: %s", name, incoming)
-				}
-
-				deadConnections <- conn
-			}(conn)
+			go clients.HandleNewConnection(conn, messages, deadConnections)
 
 		// Accept messages from connected clients
 		case message := <-messages:
-			ic := make(chan net.Conn)
-			go func() {
-				for conn := range ic {
-					go func(conn net.Conn, message string) {
-						message = fmt.Sprintf("%v %v", time.Now().Format("15:04:05"), message)
-						_, err := conn.Write([]byte(message))
-						if err != nil {
-							deadConnections <- conn
-						}
-					}(conn, message)
-				}
-			}()
-
-			if err := allClients.IterateMapKeys(ic); err != nil {
-				log.WithField("error", err).Fatal("error iterating through allClients")
-			}
+			go clients.BroadcastMessage(message, deadConnections)
 
 			log.WithFields(log.Fields{
-				"message": message,
-				"numClients": allClients.Length(),
+				"message":    message,
+				"numClients": clients.Length(),
 			}).Info("message broadcasted to clients")
 
 		// Remove dead clients
 		case conn := <-deadConnections:
-			go func() {
-				n := allClients.GetValue(conn)
-				messages <- fmt.Sprintf("%v disconnected\r\n", n)
-				log.WithField("clientName", n).Info("client disconnected")
-				allClients.DeleteKey(conn)
-			}()
+			log.WithField("clientName", clients.GetValue(conn)).Info("client disconnected")
+			go clients.HandleDisconnect(conn, messages)
 		}
+	}
+}
+
+func AcceptIncomingConnections(server net.Listener, newConnections chan net.Conn) {
+	for {
+		conn, err := server.Accept()
+		if err != nil {
+			log.WithField("error", err).Fatal("error accepting connection")
+		}
+		newConnections <- conn
 	}
 }
 
