@@ -3,17 +3,34 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"time"
 	"github.com/Pallinder/go-randomdata"
 	"strings"
 	"github.com/jwenz723/telchat/clientmap"
+	"path/filepath"
+	log "github.com/sirupsen/logrus"
 )
 
 // Used as an example: https://github.com/kljensen/golang-chat
 func main() {
+	config, err := NewConfig("config.yml")
+	if err != nil {
+		log.WithField("error", err).Fatal("error parsing config.yml")
+	}
+
+	// Setup log path to log messages out to
+	if l, err := InitLogging(config.LogDirectory, config.LogLevel, config.LogJSON); err != nil {
+		log.WithField("error", err).Fatal("error initializing log file")
+	} else {
+		defer func() {
+			if err = l.Close(); err != nil {
+				log.WithField("error", err).Fatal("error closing log file")
+			}
+		}()
+	}
+
 	// Contains a reference to all connected clients
 	allClients := clientmap.NewClientMap()
 
@@ -27,11 +44,17 @@ func main() {
 	messages := make(chan string)
 
 	// Start the TCP server
-	server, err := net.Listen("tcp", ":6000")
+	server, err := net.Listen("tcp", fmt.Sprintf("%s:%d", config.Address, config.Port))
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.WithFields(log.Fields{
+			"address": config.Address,
+			"port": config.Port,
+			"error": err,
+		}).Fatal("Failed to start TCP server")
 	}
+	log.WithFields(log.Fields{
+		"address": server.Addr(),
+	}).Info("TCP server listening for incoming connections")
 
 	// Tell the server to accept connections forever
 	// and push new connections into the newConnections channel.
@@ -39,8 +62,7 @@ func main() {
 		for {
 			conn, err := server.Accept()
 			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
+				log.WithField("error", err).Fatal("error accepting connection")
 			}
 			newConnections <- conn
 		}
@@ -82,9 +104,7 @@ func main() {
 					return
 				}
 
-				m := fmt.Sprintf("%v %v joined\r\n", time.Now().Format("15:04:05"), name)
-				messages <- m
-				log.Printf(m)
+				messages <- fmt.Sprintf("%v joined\r\n", name)
 
 				for {
 					incoming, err := reader.ReadString('\n')
@@ -92,7 +112,7 @@ func main() {
 						break
 					}
 
-					messages <- fmt.Sprintf("%v %v: %s", time.Now().Format("15:04:05"), name, incoming)
+					messages <- fmt.Sprintf("%v: %s", name, incoming)
 				}
 
 				deadConnections <- conn
@@ -104,6 +124,7 @@ func main() {
 			go func() {
 				for conn := range ic {
 					go func(conn net.Conn, message string) {
+						message = fmt.Sprintf("%v %v", time.Now().Format("15:04:05"), message)
 						_, err := conn.Write([]byte(message))
 						if err != nil {
 							deadConnections <- conn
@@ -113,19 +134,67 @@ func main() {
 			}()
 
 			if err := allClients.IterateMapKeys(ic); err != nil {
-				fmt.Println(err)
+				log.WithField("error", err).Fatal("error iterating through allClients")
 			}
 
-			log.Printf("New message broadcast to %d clients: %s", allClients.Length(), message)
+			log.WithFields(log.Fields{
+				"message": message,
+				"numClients": allClients.Length(),
+			}).Info("message broadcasted to clients")
 
 		// Remove dead clients
 		case conn := <-deadConnections:
 			go func() {
-				m := fmt.Sprintf("%v %v disconnected\r\n", time.Now().Format("15:04:05"), allClients.GetValue(conn))
-				messages <- m
-				log.Printf(m)
+				n := allClients.GetValue(conn)
+				messages <- fmt.Sprintf("%v disconnected\r\n", n)
+				log.WithField("clientName", n).Info("client disconnected")
 				allClients.DeleteKey(conn)
 			}()
 		}
 	}
+}
+
+// InitLogging is used to initialize all properties of the logrus
+// logging library.
+func InitLogging(logDirectory string, logLevel string, jsonOutput bool) (file *os.File, err error) {
+	// if LogDirectory is "" then logging will just go to stdout
+	if logDirectory != "" {
+		if _, err = os.Stat(logDirectory); os.IsNotExist(err) {
+			err := os.MkdirAll(logDirectory, 0777)
+			if err != nil {
+				return nil, err
+			}
+
+			// Chmod is needed because the permissions can't be set by the Mkdir function in Linux
+			err = os.Chmod(logDirectory, 0777)
+			if err != nil {
+				return nil, err
+			}
+		}
+		file, err = os.OpenFile(filepath.Join(logDirectory, fmt.Sprintf("%s%s", time.Now().Local().Format("20060102"), ".log")), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return nil, err
+		}
+		log.SetOutput(file)
+	} else {
+		// Output to stdout instead of the default stderr
+		log.SetOutput(os.Stdout)
+	}
+
+	logLevel = strings.ToLower(logLevel)
+
+	if jsonOutput {
+		log.SetFormatter(&log.JSONFormatter{})
+	} else {
+		log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
+	}
+
+	l, err := log.ParseLevel(logLevel)
+	if err != nil {
+		log.SetLevel(log.InfoLevel)
+	} else {
+		log.SetLevel(l)
+	}
+
+	return file, nil
 }
