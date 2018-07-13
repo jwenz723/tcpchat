@@ -19,9 +19,14 @@ type Message struct {
 
 // String converts m into a message that can be displayed to a user
 func (m *Message) String() string {
+	if !strings.HasSuffix(m.Message, "\r\n") {
+		m.Message += "\r\n"
+	}
 	return fmt.Sprintf("%v %s: %s", time.Now().Format("15:04:05"), m.Sender, m.Message)
 }
 
+// Transporter is used to send messages between connected clients. Any messages that are sent into the Messages()
+// channel will be transported outbound to all connected clients.
 type Transporter interface {
 	DeadConnections() chan net.Conn
 	Messages() chan Message
@@ -30,7 +35,7 @@ type Transporter interface {
 	StopTransporter()
 }
 
-// NewTransporter will create a new transporter
+// NewTransporter will create a new Transporter used to send client Messages to other clients
 func NewTransporter(logger *logrus.Logger) Transporter {
 	return &transporter{
 		clients:         make(map[net.Conn]string),
@@ -54,6 +59,7 @@ type transporter struct {
 	newConnections  chan net.Conn
 }
 
+// StartTransporter will start the transporter
 func (t *transporter) StartTransporter() error {
 	for {
 		select {
@@ -77,19 +83,23 @@ func (t *transporter) StartTransporter() error {
 	return nil
 }
 
+// StopTransporter will stop the transporter
 func (t *transporter) StopTransporter() {
 	t.logger.Info("stopping transporter...")
 	close(t.done)
 }
 
+// DeadConnections will return a reference to a channel that all dead client connections are sent on
 func (t *transporter) DeadConnections() chan net.Conn {
 	return t.deadConnections
 }
 
+// Messages will return a reference to a channel that all client messages are sent on
 func (t *transporter) Messages() chan Message {
 	return t.messages
 }
 
+// NewConnections will return a reference to a channel that all new client connections are sent on
 func (t *transporter) NewConnections() chan net.Conn {
 	return t.newConnections
 }
@@ -171,7 +181,8 @@ func (t *transporter) handleConnect(conn net.Conn, messages chan Message, deadCo
 	t.addClient(conn, name)
 
 	t.logger.WithFields(logrus.Fields{
-		"addr": conn.RemoteAddr(),
+		"address.local": conn.LocalAddr(),
+		"address.remote": conn.RemoteAddr(),
 		"name": name,
 	}).Info("client connected")
 
@@ -202,7 +213,8 @@ func (t *transporter) handleConnect(conn net.Conn, messages chan Message, deadCo
 // handleDisconnect will do all the necessary work for a disconnected client (conn)
 func (t *transporter) handleDisconnect(conn net.Conn, messages chan Message) {
 	t.logger.WithFields(logrus.Fields{
-		"addr": conn.RemoteAddr(),
+		"address.local": conn.LocalAddr(),
+		"address.remote": conn.RemoteAddr(),
 		"name": t.getClientName(conn),
 	}).Info("client disconnected")
 

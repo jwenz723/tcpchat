@@ -1,4 +1,4 @@
-package web
+package http
 
 import (
 	"github.com/sirupsen/logrus"
@@ -11,20 +11,24 @@ import (
 	"context"
 )
 
-// Handler serves the HTTP endpoints of the server
+// Handler serves the HTTP endpoints of the listener
 type Handler struct {
-	logger *logrus.Logger
-	messages chan transporter.Message
-	newConnections chan net.Conn
-	router *httprouter.Router
+	address 			string
+	logger 				*logrus.Logger
+	messages 			chan transporter.Message
+	newConnections 		chan net.Conn
+	port 				int
+	router 				*httprouter.Router
 }
 
-// New initializes a new web Handler.
-func New(logger *logrus.Logger, messages chan transporter.Message, newConnections chan net.Conn) *Handler {
+// New initializes a new http Handler
+func New(address string, port int, messages chan transporter.Message, newConnections chan net.Conn, logger *logrus.Logger) *Handler {
 	h := &Handler{
+		address:		address,
 		logger:      	logger,
 		messages: 	 	messages,
 		newConnections: newConnections,
+		port:			port,
 		router: 		httprouter.New(),
 	}
 
@@ -33,8 +37,9 @@ func New(logger *logrus.Logger, messages chan transporter.Message, newConnection
 	return h
 }
 
-func (h *Handler) Run(ctx context.Context) error {
-	listener, err := net.Listen("tcp", ":8080")
+// Start will start the http listener
+func (h *Handler) Start(ctx context.Context) error {
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", h.address, h.port))
 	if err != nil {
 		return err
 	}
@@ -44,19 +49,24 @@ func (h *Handler) Run(ctx context.Context) error {
 		errCh <- http.Serve(listener, h.router)
 	}()
 
+	h.logger.WithFields(logrus.Fields{
+		"address": listener.Addr(),
+	}).Info("HTTP listener accepting connections")
+
 
 	for {
 		select {
 		case e := <-errCh:
 			return e
 		case <-ctx.Done():
-			h.logger.Info("stopping web listener...")
+			h.logger.Info("stopping http listener...")
 			listener.Close()
 			return nil
 		}
 	}
 }
 
+// message is a handler for the /messages endpoint used to send all incoming messages to the h.messages channel
 func (h *Handler) message(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	dec := json.NewDecoder(r.Body)
 	var m transporter.Message
@@ -64,7 +74,6 @@ func (h *Handler) message(w http.ResponseWriter, r *http.Request, ps httprouter.
 	if err != nil {
 		panic(err)
 	}
-	m.Message = fmt.Sprintf("%s\r\n", m.Message)
 
 	h.messages <- m
 	fmt.Fprintln(w, "sent")

@@ -8,11 +8,13 @@ import (
 
 // Config defines a struct to match a configuration yaml file.
 type Config struct {
-	Address 			string 		`yaml:"Address"`
+	HTTPAddress 		string 		`yaml:"HTTPAddress"`
+	HTTPPort 			int 		`yaml:"HTTPPort"`
 	LogDirectory 		string 		`yaml:"LogDirectory"`
 	LogJSON 			bool		`yaml:"LogJSON"`
 	LogLevel 			string 		`yaml:"LogLevel"`
-	Port 				int 		`yaml:"Port"`
+	TCPAddress 			string 		`yaml:"TCPAddress"`
+	TCPPort 			int 		`yaml:"TCPPort"`
 }
 
 // UnmarshalYAML overrides what happens when the yaml.Unmarshal function is executed on the Config type
@@ -33,10 +35,15 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 
-	// Set a default port
-	//if c.Port == 0 {
-	//	c.Port = 6000
-	//}
+	// Set a default port for the HTTP listener
+	if c.HTTPPort == 0 {
+		c.HTTPPort = 8080
+	}
+
+	// Set a default port for the TCP listener
+	if c.TCPPort == 0 {
+		c.TCPPort = 6000
+	}
 
 	return nil
 }

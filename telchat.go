@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"time"
 	"strings"
@@ -10,37 +9,36 @@ import (
 	"path/filepath"
 	"github.com/sirupsen/logrus"
 	"github.com/oklog/run"
-	"github.com/jwenz723/telchat/web"
+	"github.com/jwenz723/telchat/http"
 	"context"
+	"github.com/jwenz723/telchat/tcp"
 )
 
-// Channel into which messages from clients will be pushed to be broadcast to other clients
-var (
-	logger *logrus.Logger
-)
-
-// Used as an example: https://github.com/kljensen/golang-chat
+// Source of inspiration for a TCP chat app: https://github.com/kljensen/golang-chat
 func main() {
 	config, err := NewConfig("config.yml")
 	if err != nil {
-		logger.WithField("error", err).Fatal("error parsing config.yml")
+		panic(fmt.Errorf("error parsing config.yml: %s", err))
 	}
 
 	// setup logging to file
-	l, teardown, err := InitLogging(config.LogDirectory, config.LogLevel, config.LogJSON)
+	logger, teardown, err := InitLogging(config.LogDirectory, config.LogLevel, config.LogJSON)
 	if err != nil {
 		logger.Fatalf("error initializing logger file -> %v\n", err)
 	}
 	defer teardown()
-	logger = l
 
 	t := transporter.NewTransporter(logger)
-	ctxWeb, cancelWeb := context.WithCancel(context.Background())
-	webHandler := web.New(logger, t.Messages(), t.NewConnections())
+	ctxTCP, cancelTCP := context.WithCancel(context.Background())
 
+	ctxHTTP, cancelHTTP := context.WithCancel(context.Background())
+	httpHandler := http.New(config.HTTPAddress, config.HTTPPort, t.Messages(), t.NewConnections(), logger)
+
+	// using a run.Group to handle automatic stopping of all components of the application in
+	// the event that one of the components experiences an error.
 	var g run.Group
-	// Transporter to handle message transport
 	{
+		// Transporter to handle message transport
 		g.Add(
 			func() error {
 				return t.StartTransporter()
@@ -50,76 +48,52 @@ func main() {
 			},
 		)
 	}
-	// TCP handler
 	{
-		done := make(chan struct{})
+		// TCP listener - accepts messages via telnet connection
 		g.Add(
 			func() error {
-				return StartTCPServer(config.Address, config.Port, t.NewConnections(), done)
-			},
-			func(err error) {
-				close(done)
-			},
-		)
-	}
-	// Web handler.
-	{
-		g.Add(
-			func() error {
-				if err := webHandler.Run(ctxWeb); err != nil {
-					return fmt.Errorf("error starting web server: %s", err)
+				if err := tcp.Start(config.TCPAddress, config.TCPPort,logger, t.NewConnections(), ctxTCP); err != nil {
+					return fmt.Errorf("error starting TCP listener: %s", err)
 				}
 				return nil
 			},
 			func(err error) {
-				cancelWeb()
+				cancelTCP()
 			},
 		)
 	}
+	{
+		// Web listener - accepts messages via REST api
+		g.Add(
+			func() error {
+				if err := httpHandler.Start(ctxHTTP); err != nil {
+					return fmt.Errorf("error starting http listener: %s", err)
+				}
+				return nil
+			},
+			func(err error) {
+				cancelHTTP()
+			},
+		)
+	}
+	//{
+	//	g.Add(
+	//		func() error {
+	//			time.Sleep(10 * time.Second)
+	//			return fmt.Errorf("10 second timeout error")
+	//		},
+	//		func(err error) {
+	//			// to nothing
+	//		},
+	//	)
+	//}
 
 	if err := g.Run(); err != nil {
 		logger.Fatal(err)
 	}
 }
 
-// StartTCPServer starts a new tcp listener to allow clients to connect to
-func StartTCPServer(address string, port int, newConnections chan net.Conn, done chan struct{}) error {
-	// Start the TCP server
-	server, err := net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
-	if err != nil {
-		return err
-	}
-	logger.WithFields(logrus.Fields{
-		"address": server.Addr(),
-	}).Info("TCP server listening for incoming connections")
-
-	connections := make(chan net.Conn)
-	go func() {
-		for {
-			conn, err := server.Accept()
-			if err != nil {
-				logger.WithField("error", err).Fatal("error accepting connection")
-			}
-			connections <- conn
-		}
-	}()
-
-	for {
-		select {
-		case conn := <-connections:
-			newConnections <- conn
-		case <-done:
-			logger.Info("stopping TCP server...")
-			close(connections)
-			return nil
-		}
-	}
-
-	return nil
-}
-
-// InitLogging is used to initialize all properties of the logrus
-// logging library.
+// InitLogging is used to initialize all properties of the logrus logging library.
 func InitLogging(logDirectory string, logLevel string, jsonOutput bool) (logger *logrus.Logger, teardown func(), err error) {
 	logger = logrus.New()
 	var file *os.File
