@@ -22,32 +22,89 @@ func (m *Message) String() string {
 	return fmt.Sprintf("%v %s: %s", time.Now().Format("15:04:05"), m.Sender, m.Message)
 }
 
-// transporter is a concurrency-safe map of client connections and client names
-type transporter struct {
-	sync.RWMutex
-	clients map[net.Conn]string
-	Logger  *logrus.Logger
+type Transporter interface {
+	DeadConnections() chan net.Conn
+	Messages() chan Message
+	NewConnections() chan net.Conn
+	StartTransporter() error
+	StopTransporter()
 }
 
-// NewClientMap will create a new transporter
-func NewClientMap(logger *logrus.Logger) transporter {
-	return transporter{
-		clients: make(map[net.Conn]string),
-		Logger:  logger,
+// NewTransporter will create a new transporter
+func NewTransporter(logger *logrus.Logger) Transporter {
+	return &transporter{
+		clients:         make(map[net.Conn]string),
+		deadConnections: make(chan net.Conn),
+		done:            make(chan struct{}),
+		logger:          logger,
+		messages:        make(chan Message),
+		mutex:           &sync.RWMutex{},
+		newConnections:  make(chan net.Conn),
 	}
 }
 
-// AddClient will place the connection/name (key/value) pair into c.clients
-func (t *transporter) AddClient(key net.Conn, value string) {
-	t.Lock()
-	defer t.Unlock()
+// transporter is a concurrency-safe map of client connections and client names that will broadcast messages to clients
+type transporter struct {
+	clients         map[net.Conn]string
+	deadConnections chan net.Conn
+	done            chan struct{}
+	logger          *logrus.Logger
+	messages        chan Message
+	mutex           *sync.RWMutex
+	newConnections  chan net.Conn
+}
+
+func (t *transporter) StartTransporter() error {
+	for {
+		select {
+		// Accept new clients
+		case conn := <-t.newConnections:
+			go t.handleConnect(conn, t.messages, t.deadConnections)
+
+			// Accept messages from connected clients
+		case message := <-t.messages:
+			go t.broadcastMessage(message, t.deadConnections)
+
+			// Remove dead clients
+		case conn := <-t.deadConnections:
+			go t.handleDisconnect(conn, t.messages)
+
+		case <-t.done:
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func (t *transporter) StopTransporter() {
+	t.logger.Info("stopping transporter...")
+	close(t.done)
+}
+
+func (t *transporter) DeadConnections() chan net.Conn {
+	return t.deadConnections
+}
+
+func (t *transporter) Messages() chan Message {
+	return t.messages
+}
+
+func (t *transporter) NewConnections() chan net.Conn {
+	return t.newConnections
+}
+
+// addClient will place the connection/name (key/value) pair into c.clients
+func (t *transporter) addClient(key net.Conn, value string) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	t.clients[key] = value
 }
 
-// BroadcastMessage will send message to all clients within c
-func (t *transporter) BroadcastMessage(message Message, deadConnections chan net.Conn) {
+// broadcastMessage will send message to all clients within c
+func (t *transporter) broadcastMessage(message Message, deadConnections chan net.Conn) {
 	wg := sync.WaitGroup{}
-	for conn := range t.IterateClients() {
+	for conn := range t.iterateClients() {
 		wg.Add(1)
 		go func(conn net.Conn, message Message) {
 			defer wg.Done()
@@ -56,33 +113,33 @@ func (t *transporter) BroadcastMessage(message Message, deadConnections chan net
 				deadConnections <- conn
 			}
 
-			t.Logger.WithFields(logrus.Fields{
+			t.logger.WithFields(logrus.Fields{
 				"message":  message.Message,
-				"receiver": t.GetClientName(conn),
+				"receiver": t.getClientName(conn),
 				"sender":   message.Sender,
 			}).Debug("sent message")
 		}(conn, message)
 	}
 
 	wg.Wait()
-	t.Logger.WithFields(logrus.Fields{
+	t.logger.WithFields(logrus.Fields{
 		"message":    message.Message,
-		"numClients": t.NumClients(),
+		"numClients": t.numClients(),
 		"sender":     message.Sender,
 	}).Info("sent message to all clients")
 }
 
-// DeleteClient will delete the specified key from c.clients
-func (t *transporter) DeleteClient(key net.Conn) {
-	t.Lock()
-	defer t.Unlock()
+// deleteClient will delete the specified key from c.clients
+func (t *transporter) deleteClient(key net.Conn) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	delete(t.clients, key)
 }
 
-// GetClientName will retrieve the name corresponding to specifed client within c.clients or "" if client doesn't exist
-func (t *transporter) GetClientName(client net.Conn) string {
-	t.RLock()
-	defer t.RUnlock()
+// getClientName will retrieve the name corresponding to specifed client within c.clients or "" if client doesn't exist
+func (t *transporter) getClientName(client net.Conn) string {
+	t.mutex.RLock()
+	defer t.mutex.RUnlock()
 	val, ok := t.clients[client]
 	if !ok {
 		return ""
@@ -90,8 +147,8 @@ func (t *transporter) GetClientName(client net.Conn) string {
 	return val
 }
 
-// HandleConnect will add conn into c and setup a reader to allow conn to send messages (broadcast to clients)
-func (t *transporter) HandleConnect(conn net.Conn, messages chan Message, deadConnections chan net.Conn) {
+// handleConnect will add conn into c and setup a reader to allow conn to send messages (broadcast to clients)
+func (t *transporter) handleConnect(conn net.Conn, messages chan Message, deadConnections chan net.Conn) {
 	name := randomdata.SillyName()
 	_, err := conn.Write([]byte(fmt.Sprintf("Enter your name (default: %v)\r\n", name)))
 	if err != nil {
@@ -111,9 +168,9 @@ func (t *transporter) HandleConnect(conn net.Conn, messages chan Message, deadCo
 	if incoming != "" {
 		name = incoming
 	}
-	t.AddClient(conn, name)
+	t.addClient(conn, name)
 
-	t.Logger.WithFields(logrus.Fields{
+	t.logger.WithFields(logrus.Fields{
 		"addr": conn.RemoteAddr(),
 		"name": name,
 	}).Info("client connected")
@@ -132,7 +189,7 @@ func (t *transporter) HandleConnect(conn net.Conn, messages chan Message, deadCo
 			break
 		}
 
-		t.Logger.WithFields(logrus.Fields{
+		t.logger.WithFields(logrus.Fields{
 			"message": m,
 			"sender":  name,
 		}).Info("received message via tcp")
@@ -142,40 +199,40 @@ func (t *transporter) HandleConnect(conn net.Conn, messages chan Message, deadCo
 	deadConnections <- conn
 }
 
-// HandleDisconnect will do all the necessary work for a disconnected client (conn)
-func (t *transporter) HandleDisconnect(conn net.Conn, messages chan Message) {
-	t.Logger.WithFields(logrus.Fields{
+// handleDisconnect will do all the necessary work for a disconnected client (conn)
+func (t *transporter) handleDisconnect(conn net.Conn, messages chan Message) {
+	t.logger.WithFields(logrus.Fields{
 		"addr": conn.RemoteAddr(),
-		"name": t.GetClientName(conn),
+		"name": t.getClientName(conn),
 	}).Info("client disconnected")
 
-	n := t.GetClientName(conn)
+	n := t.getClientName(conn)
 	messages <- Message{"Disconnected", n}
-	t.DeleteClient(conn)
+	t.deleteClient(conn)
 }
 
-// IterateClients will send each key contained in c.clients to a returned channel
-func (t *transporter) IterateClients() <-chan net.Conn {
+// iterateClients will send each key contained in c.clients to a returned channel
+func (t *transporter) iterateClients() <-chan net.Conn {
 	i := make(chan net.Conn)
 
 	go func() {
 		defer func() {
-			t.RUnlock()
+			t.mutex.RUnlock()
 			close(i)
 		}()
 
-		t.RLock()
+		t.mutex.RLock()
 		for k := range t.clients {
-			t.RUnlock()
+			t.mutex.RUnlock()
 			i <- k
-			t.RLock()
+			t.mutex.RLock()
 		}
 	}()
 
 	return i
 }
 
-// NumClients will return the number of keys within c.clients
-func (t *transporter) NumClients() int {
+// numClients will return the number of keys within c.clients
+func (t *transporter) numClients() int {
 	return len(t.clients)
 }

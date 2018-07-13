@@ -9,15 +9,14 @@ import (
 	"github.com/jwenz723/telchat/transporter"
 	"path/filepath"
 	"github.com/sirupsen/logrus"
-	"net/http"
-	"github.com/julienschmidt/httprouter"
-	"encoding/json"
+	"github.com/oklog/run"
+	"github.com/jwenz723/telchat/web"
+	"context"
 )
 
 // Channel into which messages from clients will be pushed to be broadcast to other clients
 var (
 	logger *logrus.Logger
-	messages = make(chan transporter.Message)
 )
 
 // Used as an example: https://github.com/kljensen/golang-chat
@@ -35,67 +34,88 @@ func main() {
 	defer teardown()
 	logger = l
 
-	// Contains a reference to all connected clients
-	clients := transporter.NewClientMap(logger)
+	t := transporter.NewTransporter(logger)
+	ctxWeb, cancelWeb := context.WithCancel(context.Background())
+	webHandler := web.New(logger, t.Messages(), t.NewConnections())
 
-	// Channel into which the TCP server will push new connections.
-	newConnections := make(chan net.Conn)
+	var g run.Group
+	// Transporter to handle message transport
+	{
+		g.Add(
+			func() error {
+				return t.StartTransporter()
+			},
+			func(err error) {
+				t.StopTransporter()
+			},
+		)
+	}
+	// TCP handler
+	{
+		done := make(chan struct{})
+		g.Add(
+			func() error {
+				return StartTCPServer(config.Address, config.Port, t.NewConnections(), done)
+			},
+			func(err error) {
+				close(done)
+			},
+		)
+	}
+	// Web handler.
+	{
+		g.Add(
+			func() error {
+				if err := webHandler.Run(ctxWeb); err != nil {
+					return fmt.Errorf("error starting web server: %s", err)
+				}
+				return nil
+			},
+			func(err error) {
+				cancelWeb()
+			},
+		)
+	}
 
-	// Channel into which we'll push dead connections for removal from clients.
-	deadConnections := make(chan net.Conn)
-
-
-
-	// Tell the server to accept connections forever
-	// and push new connections into the newConnections channel.
-	go StartTCPServer(config.Address, config.Port, newConnections)
-
-	go func() {
-		for {
-			select {
-			// Accept new clients
-			case conn := <-newConnections:
-				go clients.HandleConnect(conn, messages, deadConnections)
-
-			// Accept messages from connected clients
-			case message := <-messages:
-				go clients.BroadcastMessage(message, deadConnections)
-
-			// Remove dead clients
-			case conn := <-deadConnections:
-				go clients.HandleDisconnect(conn, messages)
-			}
-		}
-	}()
-
-	router := httprouter.New()
-	router.POST("/message", HandleMessage)
-
-	logger.Fatal(http.ListenAndServe(":8080", router))
+	if err := g.Run(); err != nil {
+		logger.Fatal(err)
+	}
 }
 
 // StartTCPServer starts a new tcp listener to allow clients to connect to
-func StartTCPServer(address string, port int, newConnections chan net.Conn) {
+func StartTCPServer(address string, port int, newConnections chan net.Conn, done chan struct{}) error {
 	// Start the TCP server
 	server, err := net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
 	if err != nil {
-		logger.WithFields(logrus.Fields{
-			"address": address,
-			"port": port,
-			"error": err,
-		}).Fatal("Failed to start TCP server")
+		return err
 	}
 	logger.WithFields(logrus.Fields{
 		"address": server.Addr(),
 	}).Info("TCP server listening for incoming connections")
 
-	for {
-		conn, err := server.Accept()
-		if err != nil {
-			logger.WithField("error", err).Fatal("error accepting connection")
+	connections := make(chan net.Conn)
+	go func() {
+		for {
+			conn, err := server.Accept()
+			if err != nil {
+				logger.WithField("error", err).Fatal("error accepting connection")
+			}
+			connections <- conn
 		}
-		newConnections <- conn
+	}()
+
+	for {
+		select {
+		case conn := <-connections:
+			newConnections <- conn
+		case <-done:
+			logger.Info("stopping TCP server...")
+			close(connections)
+			return nil
+		}
 	}
+
+	return nil
 }
 
 // InitLogging is used to initialize all properties of the logrus
@@ -153,21 +173,3 @@ func InitLogging(logDirectory string, logLevel string, jsonOutput bool) (logger 
 
 	return logger, teardown, nil
 }
-
-func HandleMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	dec := json.NewDecoder(r.Body)
-	var m transporter.Message
-	err := dec.Decode(&m)
-	if err != nil {
-		panic(err)
-	}
-	m.Message = fmt.Sprintf("%s\r\n", m.Message)
-
-	messages <- m
-	fmt.Fprintln(w, "sent")
-	logger.WithFields(logrus.Fields{
-		"message": m.Message,
-		"sender": m.Sender,
-	}).Info("received message via http POST")
-}
-
