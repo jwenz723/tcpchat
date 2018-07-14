@@ -1,0 +1,7 @@
+HTTPAddress:
+HTTPPort: 8080
+LogDirectory: logs
+LogJSON: false
+LogLevel: info
+TCPAddress:
+TCPPort: 6000
