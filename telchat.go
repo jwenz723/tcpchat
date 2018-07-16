@@ -29,7 +29,10 @@ func main() {
 	defer teardown()
 
 	t := transporter.NewTransporter(logger)
-	ctxTCP, cancelTCP := context.WithCancel(context.Background())
+	tcpHandler, err := tcp.New(config.TCPAddress, config.TCPPort, t.NewConnections(), logger)
+	if err != nil {
+		logger.Fatalf("failed to create tcpHandler -> %s\n", err)
+	}
 
 	ctxHTTP, cancelHTTP := context.WithCancel(context.Background())
 	httpHandler := http.New(config.HTTPAddress, config.HTTPPort, t.Messages(), t.NewConnections(), logger)
@@ -52,13 +55,13 @@ func main() {
 		// TCP listener - accepts messages via telnet connection
 		g.Add(
 			func() error {
-				if err := tcp.Start(config.TCPAddress, config.TCPPort,logger, t.NewConnections(), ctxTCP); err != nil {
+				if err := tcpHandler.Start(); err != nil {
 					return fmt.Errorf("error starting TCP listener: %s", err)
 				}
 				return nil
 			},
 			func(err error) {
-				cancelTCP()
+				tcpHandler.Stop()
 			},
 		)
 	}
@@ -76,17 +79,6 @@ func main() {
 			},
 		)
 	}
-	//{
-	//	g.Add(
-	//		func() error {
-	//			time.Sleep(10 * time.Second)
-	//			return fmt.Errorf("10 second timeout error")
-	//		},
-	//		func(err error) {
-	//			// to nothing
-	//		},
-	//	)
-	//}
 
 	if err := g.Run(); err != nil {
 		logger.Fatal(err)

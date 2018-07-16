@@ -4,19 +4,39 @@ import (
 	"github.com/sirupsen/logrus"
 	"fmt"
 	"net"
-	"context"
 )
 
-// Start starts the TCP listener
-func Start(address string, port int, logger *logrus.Logger, newConnections chan net.Conn, ctx context.Context) error {
+// Handler contains options for a net.Listener as well as a way to handle all new connections that are accepted
+type Handler struct {
+	address 			string
+	done				chan struct{}
+	listener			net.Listener
+	logger 				*logrus.Logger
+	newConnections 		chan net.Conn
+	port 				int
+}
+
+// New will create a new Handler for starting a new TCP listener
+func New(address string, port int, newConnections chan net.Conn, logger *logrus.Logger) (*Handler, error) {
+	return &Handler{
+		address:		address,
+		done:			make(chan struct{}),
+		logger:      	logger,
+		newConnections: newConnections,
+		port:			port,
+	}, nil
+}
+
+// Start starts the TCP listener and accepts incoming connections indefinitely until Stop() is called
+func (h *Handler) Start() error {
 	// Start the TCP listener
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", h.address, h.port))
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
-	logger.WithFields(logrus.Fields{
-		"address": listener.Addr(),
+	h.listener = l
+	h.logger.WithFields(logrus.Fields{
+		"address": h.listener.Addr(),
 	}).Info("TCP listener accepting connections")
 
 	// pulled this code from the example at: https://stackoverflow.com/a/18969608/3703667
@@ -27,19 +47,31 @@ func Start(address string, port int, logger *logrus.Logger, newConnections chan 
 		}
 		c := make(chan accepted, 1)
 		go func() {
-			conn, err := listener.Accept()
+			conn, err := h.listener.Accept()
 			c <- accepted{conn, err}
 		}()
+
 		select {
 		case a := <-c:
 			if a.err != nil {
-				logger.WithField("error", err).Fatal("error accepting connection")
+				h.logger.WithField("error", a.err).Fatal("error accepting connection")
 				continue
 			}
-			newConnections <- a.conn
-		case <-ctx.Done():
-			logger.Info("stopping TCP listener...")
+			h.newConnections <- a.conn
+		case <-h.done:
+			h.logger.Info("stopping TCP listener...")
 			return nil
 		}
+	}
+}
+
+// Stop will shutdown the TCP listener
+func (h *Handler) Stop() {
+	if h.done != nil {
+		close(h.done)
+	}
+
+	if h.listener != nil {
+		h.listener.Close()
 	}
 }
