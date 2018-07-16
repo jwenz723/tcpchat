@@ -10,33 +10,32 @@ import (
 type Handler struct {
 	address 			string
 	done				chan struct{}
-	listener			net.Listener
 	logger 				*logrus.Logger
 	newConnections 		chan net.Conn
 	port 				int
 }
 
 // New will create a new Handler for starting a new TCP listener
-func New(address string, port int, newConnections chan net.Conn, logger *logrus.Logger) (*Handler, error) {
+func New(address string, port int, newConnections chan net.Conn, logger *logrus.Logger) *Handler {
 	return &Handler{
 		address:		address,
 		done:			make(chan struct{}),
 		logger:      	logger,
 		newConnections: newConnections,
 		port:			port,
-	}, nil
+	}
 }
 
 // Start starts the TCP listener and accepts incoming connections indefinitely until Stop() is called
 func (h *Handler) Start() error {
 	// Start the TCP listener
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", h.address, h.port))
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", h.address, h.port))
 	if err != nil {
 		return err
 	}
-	h.listener = l
+	defer listener.Close()
 	h.logger.WithFields(logrus.Fields{
-		"address": h.listener.Addr(),
+		"address": listener.Addr(),
 	}).Info("TCP listener accepting connections")
 
 	// pulled this code from the example at: https://stackoverflow.com/a/18969608/3703667
@@ -47,7 +46,7 @@ func (h *Handler) Start() error {
 		}
 		c := make(chan accepted, 1)
 		go func() {
-			conn, err := h.listener.Accept()
+			conn, err := listener.Accept()
 			c <- accepted{conn, err}
 		}()
 
@@ -69,9 +68,5 @@ func (h *Handler) Start() error {
 func (h *Handler) Stop() {
 	if h.done != nil {
 		close(h.done)
-	}
-
-	if h.listener != nil {
-		h.listener.Close()
 	}
 }

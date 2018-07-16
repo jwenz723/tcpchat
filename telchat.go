@@ -10,7 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/oklog/run"
 	"github.com/jwenz723/telchat/http"
-	"context"
 	"github.com/jwenz723/telchat/tcp"
 )
 
@@ -29,13 +28,9 @@ func main() {
 	defer teardown()
 
 	t := transporter.NewTransporter(logger)
-	tcpHandler, err := tcp.New(config.TCPAddress, config.TCPPort, t.NewConnections(), logger)
-	if err != nil {
-		logger.Fatalf("failed to create tcpHandler -> %s\n", err)
-	}
-
-	ctxHTTP, cancelHTTP := context.WithCancel(context.Background())
+	tcpHandler := tcp.New(config.TCPAddress, config.TCPPort, t.NewConnections(), logger)
 	httpHandler := http.New(config.HTTPAddress, config.HTTPPort, t.Messages(), t.NewConnections(), logger)
+
 
 	// using a run.Group to handle automatic stopping of all components of the application in
 	// the event that one of the components experiences an error.
@@ -69,13 +64,13 @@ func main() {
 		// Web listener - accepts messages via REST api
 		g.Add(
 			func() error {
-				if err := httpHandler.Start(ctxHTTP); err != nil {
+				if err := httpHandler.Start(); err != nil {
 					return fmt.Errorf("error starting http listener: %s", err)
 				}
 				return nil
 			},
 			func(err error) {
-				cancelHTTP()
+				httpHandler.Stop()
 			},
 		)
 	}

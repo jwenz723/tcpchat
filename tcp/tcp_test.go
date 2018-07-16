@@ -11,10 +11,7 @@ import (
 func TestNew(t *testing.T) {
 	logger, _ := test.NewNullLogger()
 	newConnections := make(chan net.Conn)
-	h, err := New("", 6000, newConnections, logger)
-	if err != nil {
-		t.Errorf("failed to create new handler -> %s", err)
-	}
+	h := New("", 6000, newConnections, logger)
 
 	if h == nil {
 		t.Errorf("received null handler from New()")
@@ -24,17 +21,17 @@ func TestNew(t *testing.T) {
 func TestHandler_Start(t *testing.T) {
 	logger, _ := test.NewNullLogger()
 	newConnections := make(chan net.Conn)
-	h, err := New("", 6000, newConnections, logger)
+	h := New("", 6000, newConnections, logger)
 
 	go func() {
-		err = h.Start()
+		err := h.Start()
 		if err != nil {
 			t.Errorf("failed to start TCP listener -> %s", err)
 		}
 	}()
 	defer h.Stop()
 
-	_, err = net.Dial("tcp", ":6000")
+	_, err := net.Dial("tcp", ":6000")
 	if err != nil {
 		t.Errorf("failed to connect via TCP to :6000 -> %s", err)
 	}
@@ -54,11 +51,11 @@ func TestHandler_Stop(t *testing.T) {
 
 	logger, _ := test.NewNullLogger()
 	newConnections := make(chan net.Conn)
-	h, err := New(address, port, newConnections, logger)
+	h := New(address, port, newConnections, logger)
 
 	// Test that h.Stop successfully stops the TCP listener
 	go func() {
-		err = h.Start()
+		err := h.Start()
 		if err != nil {
 			t.Errorf("failed to start TCP listener -> %s", err)
 		}
@@ -66,7 +63,7 @@ func TestHandler_Stop(t *testing.T) {
 	time.Sleep(1 * time.Millisecond)
 	h.Stop()
 
-	_, err = net.Dial("tcp", fmt.Sprintf("%s:%d", address, port))
+	_, err := net.Dial("tcp", fmt.Sprintf("%s:%d", address, port))
 	if err == nil {
 		t.Errorf("connect via TCP to %s:%d after h.Stop() should have stopped the TCP listener -> %s", address, port, err)
 	}
