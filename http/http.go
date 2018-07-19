@@ -8,12 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"context"
 )
 
 // Handler serves the HTTP endpoints of the listener
 type Handler struct {
 	address 			string
+	done				chan struct{}
 	logger 				*logrus.Logger
 	messages 			chan transporter.Message
 	newConnections 		chan net.Conn
@@ -25,6 +25,7 @@ type Handler struct {
 func New(address string, port int, messages chan transporter.Message, newConnections chan net.Conn, logger *logrus.Logger) *Handler {
 	h := &Handler{
 		address:		address,
+		done:			make(chan struct{}),
 		logger:      	logger,
 		messages: 	 	messages,
 		newConnections: newConnections,
@@ -38,7 +39,7 @@ func New(address string, port int, messages chan transporter.Message, newConnect
 }
 
 // Start will start the http listener
-func (h *Handler) Start(ctx context.Context) error {
+func (h *Handler) Start() error {
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", h.address, h.port))
 	if err != nil {
 		return err
@@ -58,11 +59,18 @@ func (h *Handler) Start(ctx context.Context) error {
 		select {
 		case e := <-errCh:
 			return e
-		case <-ctx.Done():
+		case <-h.done:
 			h.logger.Info("stopping http listener...")
 			listener.Close()
 			return nil
 		}
+	}
+}
+
+// Stop will shutdown the HTTP listener
+func (h *Handler) Stop() {
+	if h.done != nil {
+		close(h.done)
 	}
 }
 

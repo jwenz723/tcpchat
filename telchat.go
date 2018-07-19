@@ -10,7 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/oklog/run"
 	"github.com/jwenz723/telchat/http"
-	"context"
 	"github.com/jwenz723/telchat/tcp"
 )
 
@@ -33,10 +32,9 @@ func main() {
 	}()
 
 	t := transporter.NewTransporter(logger)
-	ctxTCP, cancelTCP := context.WithCancel(context.Background())
-
-	ctxHTTP, cancelHTTP := context.WithCancel(context.Background())
+	tcpHandler := tcp.New(config.TCPAddress, config.TCPPort, t.NewConnections(), logger)
 	httpHandler := http.New(config.HTTPAddress, config.HTTPPort, t.Messages(), t.NewConnections(), logger)
+
 
 	// using a run.Group to handle automatic stopping of all components of the application in
 	// the event that one of the components experiences an error.
@@ -56,13 +54,13 @@ func main() {
 		// TCP listener - accepts messages via telnet connection
 		g.Add(
 			func() error {
-				if err := tcp.Start(config.TCPAddress, config.TCPPort,logger, t.NewConnections(), ctxTCP); err != nil {
+				if err := tcpHandler.Start(); err != nil {
 					return fmt.Errorf("error starting TCP listener: %s", err)
 				}
 				return nil
 			},
 			func(err error) {
-				cancelTCP()
+				tcpHandler.Stop()
 			},
 		)
 	}
@@ -70,27 +68,16 @@ func main() {
 		// Web listener - accepts messages via REST api
 		g.Add(
 			func() error {
-				if err := httpHandler.Start(ctxHTTP); err != nil {
+				if err := httpHandler.Start(); err != nil {
 					return fmt.Errorf("error starting http listener: %s", err)
 				}
 				return nil
 			},
 			func(err error) {
-				cancelHTTP()
+				httpHandler.Stop()
 			},
 		)
 	}
-	//{
-	//	g.Add(
-	//		func() error {
-	//			time.Sleep(10 * time.Second)
-	//			return fmt.Errorf("10 second timeout error")
-	//		},
-	//		func(err error) {
-	//			// to nothing
-	//		},
-	//	)
-	//}
 
 	if err := g.Run(); err != nil {
 		logger.Fatal(err)
