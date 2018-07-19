@@ -26,7 +26,11 @@ func main() {
 	if err != nil {
 		logger.Fatalf("error initializing logger file -> %v\n", err)
 	}
-	defer teardown()
+	defer func() {
+		if err := teardown(); err != nil {
+			panic(err)
+		}
+	}()
 
 	t := transporter.NewTransporter(logger)
 	ctxTCP, cancelTCP := context.WithCancel(context.Background())
@@ -94,9 +98,10 @@ func main() {
 }
 
 // InitLogging is used to initialize all properties of the logrus logging library.
-func InitLogging(logDirectory string, logLevel string, jsonOutput bool) (logger *logrus.Logger, teardown func(), err error) {
+func InitLogging(logDirectory string, logLevel string, jsonOutput bool) (logger *logrus.Logger, teardown func() error, err error) {
 	logger = logrus.New()
 	var file *os.File
+	var tearDownDone bool // used to prevent teardown from being executed more than once
 
 	// if LogDirectory is "" then logging will just go to stdout
 	if logDirectory != "" {
@@ -116,19 +121,15 @@ func InitLogging(logDirectory string, logLevel string, jsonOutput bool) (logger 
 		if err != nil {
 			return nil, nil, err
 		}
-		//logger.SetOutput(file)
 		logger.Out = file
 	} else {
 		// Output to stdout instead of the default stderr
-		//logrus.SetOutput(os.Stdout)
 		logger.Out = os.Stdout
 	}
 
 	if jsonOutput {
-		//logger.SetFormatter(&logrus.JSONFormatter{})
 		logger.Formatter = &logrus.JSONFormatter{}
 	} else {
-		//logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 		logger.Formatter = &logrus.TextFormatter{FullTimestamp: true}
 	}
 
@@ -139,10 +140,15 @@ func InitLogging(logDirectory string, logLevel string, jsonOutput bool) (logger 
 		logger.SetLevel(l)
 	}
 
-	teardown = func() {
-		if err = file.Close(); err != nil {
-			logger.Errorf("error closing logger file -> %v\n", err)
+	teardown = func() error {
+		if !tearDownDone && file != nil {
+			if err = file.Close(); err != nil {
+				return fmt.Errorf("error closing logger file -> %v", err)
+			}
 		}
+
+		tearDownDone = true
+		return nil
 	}
 
 	return logger, teardown, nil
