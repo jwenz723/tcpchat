@@ -39,12 +39,12 @@ type Transporter interface {
 func NewTransporter(logger *logrus.Logger) Transporter {
 	return &transporter{
 		clients:         make(map[net.Conn]string),
-		deadConnections: make(chan net.Conn),
+		deadConnections: make(chan net.Conn, 1),
 		done:            make(chan struct{}),
 		logger:          logger,
-		messages:        make(chan Message),
+		messages:        make(chan Message, 1),
 		mutex:           &sync.RWMutex{},
-		newConnections:  make(chan net.Conn),
+		newConnections:  make(chan net.Conn, 1),
 	}
 }
 

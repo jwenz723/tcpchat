@@ -13,6 +13,7 @@ type Handler struct {
 	logger 				*logrus.Logger
 	newConnections 		chan net.Conn
 	port 				int
+	Ready				bool // Indicates that the http listener is ready to accept connections
 }
 
 // New will create a new Handler for starting a new TCP listener
@@ -28,12 +29,18 @@ func New(address string, port int, newConnections chan net.Conn, logger *logrus.
 
 // Start starts the TCP listener and accepts incoming connections indefinitely until Stop() is called
 func (h *Handler) Start() error {
+	defer func() {
+		h.Ready = false
+		close(h.done)
+		//h.done = nil
+	}()
+	//return fmt.Errorf("test")
 	// Start the TCP listener
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", h.address, h.port))
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
+	h.Ready = true
 	h.logger.WithFields(logrus.Fields{
 		"address": listener.Addr(),
 	}).Info("TCP listener accepting connections")
@@ -59,6 +66,7 @@ func (h *Handler) Start() error {
 			h.newConnections <- a.conn
 		case <-h.done:
 			h.logger.Info("stopping TCP listener...")
+			listener.Close()
 			return nil
 		}
 	}
@@ -66,7 +74,11 @@ func (h *Handler) Start() error {
 
 // Stop will shutdown the TCP listener
 func (h *Handler) Stop() {
-	if h.done != nil {
-		close(h.done)
+	if h.Ready && h.done != nil {
+		h.done <- struct {}{}
+
+		// wait for the done channel to be closed (meaning the Start() func has actually stopped running)
+		<-h.done
+		h.done = nil
 	}
 }

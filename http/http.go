@@ -12,13 +12,14 @@ import (
 
 // Handler serves the HTTP endpoints of the listener
 type Handler struct {
-	address 			string
-	done				chan struct{}
-	logger 				*logrus.Logger
-	messages 			chan transporter.Message
-	newConnections 		chan net.Conn
-	port 				int
-	router 				*httprouter.Router
+	address        string
+	done           chan struct{}
+	logger         *logrus.Logger
+	messages       chan transporter.Message
+	newConnections chan net.Conn
+	port           int
+	Ready          bool // Indicates that the http listener is ready to accept connections
+	router         *httprouter.Router
 }
 
 // New initializes a new http Handler
@@ -40,6 +41,10 @@ func New(address string, port int, messages chan transporter.Message, newConnect
 
 // Start will start the http listener
 func (h *Handler) Start() error {
+	defer func() {
+		h.Ready = false
+		close(h.done)
+	}()
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", h.address, h.port))
 	if err != nil {
 		return err
@@ -50,10 +55,10 @@ func (h *Handler) Start() error {
 		errCh <- http.Serve(listener, h.router)
 	}()
 
+	h.Ready = true
 	h.logger.WithFields(logrus.Fields{
 		"address": listener.Addr(),
 	}).Info("HTTP listener accepting connections")
-
 
 	for {
 		select {
@@ -69,8 +74,12 @@ func (h *Handler) Start() error {
 
 // Stop will shutdown the HTTP listener
 func (h *Handler) Stop() {
-	if h.done != nil {
-		close(h.done)
+	if h.Ready && h.done != nil {
+		h.done <- struct {}{}
+
+		// wait for the done channel to be closed (meaning the Start() func has actually stopped running)
+		<-h.done
+		h.done = nil
 	}
 }
 
