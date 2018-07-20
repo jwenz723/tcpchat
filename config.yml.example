@@ -1,7 +1,21 @@
+# HTTPAddress is the address that the HTTP listener will bind to (default: 8080)
 HTTPAddress:
-HTTPPort: 8080
-LogDirectory: logs
-LogJSON: false
-LogLevel: info
+
+# HTTPPort is the port that the HTTP listener will bind to (default: '')
+HTTPPort:
+
+# LogDirectory sets the directory where logs will be written to (default: 'logs')
+LogDirectory:
+
+# LogJSON can be used to set the output of logs to JSON format (default: false)
+LogJSON:
+
+# LogLevel sets the level of logging that will be logged to file.
+# Use one of: panic, fatal, error, warn, info, debug (default: 'info')
+LogLevel:
+
+# TCPAddress is the address that the TCP listener will bind to (default: '')
 TCPAddress:
-TCPPort: 6000
+
+# TCPPort is the port that the TCP listener will bind to (default: 6000)
+TCPPort:

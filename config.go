@@ -2,7 +2,7 @@ package main
 
 import (
 	"io/ioutil"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
 
@@ -30,9 +30,13 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	// Ensure a proper LogLevel was provided
-	_, err := log.ParseLevel(c.LogLevel)
-	if err != nil {
-		return err
+	if c.LogLevel == "" {
+		c.LogLevel = "info"
+	} else {
+		_, err := logrus.ParseLevel(c.LogLevel)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Set a default port for the HTTP listener
