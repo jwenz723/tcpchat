@@ -6,7 +6,6 @@ import (
 	"os"
 	"fmt"
 	"path/filepath"
-	"io"
 	"time"
 	"regexp"
 	"io/ioutil"
@@ -144,22 +143,4 @@ func TestInitLogging(t *testing.T) {
 			}
 		}
 	}
-}
-
-// readFileToEnd is a helper function to get all content in file
-// from offset to the end of the file.
-func readFileToEnd(file *os.File, buffer []byte, offset int64) (content string, err error) {
-	readBytes, err := file.ReadAt(buffer, offset)
-	if err != nil {
-		if err != io.EOF {
-			return "", err
-		}
-	}
-	offset += int64(readBytes)
-	if readBytes != 0 {
-		s := string(buffer[:readBytes])
-		return s, nil
-	}
-
-	return "", nil
 }

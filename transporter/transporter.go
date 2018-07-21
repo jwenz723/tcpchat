@@ -61,21 +61,26 @@ type transporter struct {
 
 // StartTransporter will start the transporter
 func (t *transporter) StartTransporter() error {
+	defer func() {
+		close(t.done)
+	}()
+
 	for {
 		select {
 		// Accept new clients
 		case conn := <-t.newConnections:
 			go t.handleConnect(conn, t.messages, t.deadConnections)
 
-			// Accept messages from connected clients
+		// Accept messages from connected clients
 		case message := <-t.messages:
 			go t.broadcastMessage(message, t.deadConnections)
 
-			// Remove dead clients
+		// Remove dead clients
 		case conn := <-t.deadConnections:
 			go t.handleDisconnect(conn, t.messages)
 
 		case <-t.done:
+			t.logger.Info("stopping transporter...")
 			return nil
 		}
 	}
@@ -85,8 +90,13 @@ func (t *transporter) StartTransporter() error {
 
 // StopTransporter will stop the transporter
 func (t *transporter) StopTransporter() {
-	t.logger.Info("stopping transporter...")
-	close(t.done)
+	if t.done != nil {
+		t.done <- struct{}{}
+
+		// wait for the done channel to be closed (meaning the StartTransporter() func has actually stopped running)
+		<-t.done
+		t.done = nil
+	}
 }
 
 // DeadConnections will return a reference to a channel that all dead client connections are sent on
@@ -192,7 +202,9 @@ func (t *transporter) handleConnect(conn net.Conn, messages chan Message, deadCo
 		return
 	}
 
-	messages <- Message{"Joined\r\n", name}
+	go func() {
+		messages <- Message{"Joined\r\n", name}
+	}()
 
 	for {
 		m, err := reader.ReadString('\n')
