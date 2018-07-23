@@ -74,7 +74,7 @@ func TestHandler_Start(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer conn.Close()
+		defer conn2.Close()
 		reader2 := bufio.NewReader(conn2)
 
 		// Extract entry message: Enter your name (default: Toothclover)
