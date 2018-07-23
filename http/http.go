@@ -2,12 +2,12 @@ package http
 
 import (
 	"github.com/sirupsen/logrus"
-	"github.com/jwenz723/telchat/transporter"
 	"net/http"
 	"github.com/julienschmidt/httprouter"
 	"encoding/json"
 	"fmt"
 	"net"
+	"github.com/jwenz723/telchat/tcp"
 )
 
 // Handler serves the HTTP endpoints of the listener
@@ -15,21 +15,19 @@ type Handler struct {
 	address        string
 	done           chan struct{}
 	logger         *logrus.Logger
-	messages       chan transporter.Message
-	newConnections chan net.Conn
+	messages       chan tcp.Message
 	port           int
 	Ready          bool // Indicates that the http listener is ready to accept connections
 	router         *httprouter.Router
 }
 
 // New initializes a new http Handler
-func New(address string, port int, messages chan transporter.Message, newConnections chan net.Conn, logger *logrus.Logger) *Handler {
+func New(address string, port int, messages chan tcp.Message, logger *logrus.Logger) *Handler {
 	h := &Handler{
 		address:		address,
 		done:			make(chan struct{}),
 		logger:      	logger,
 		messages: 	 	messages,
-		newConnections: newConnections,
 		port:			port,
 		router: 		httprouter.New(),
 	}
@@ -86,7 +84,7 @@ func (h *Handler) Stop() {
 // message is a handler for the /messages endpoint used to send all incoming messages to the h.messages channel
 func (h *Handler) message(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	dec := json.NewDecoder(r.Body)
-	var m transporter.Message
+	var m tcp.Message
 	err := dec.Decode(&m)
 	if err != nil {
 		panic(err)

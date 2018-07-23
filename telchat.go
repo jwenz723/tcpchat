@@ -5,7 +5,6 @@ import (
 	"os"
 	"time"
 	"strings"
-	"github.com/jwenz723/telchat/transporter"
 	"path/filepath"
 	"github.com/sirupsen/logrus"
 	"github.com/oklog/run"
@@ -31,25 +30,13 @@ func main() {
 		}
 	}()
 
-	t := transporter.NewTransporter(logger)
-	tcpHandler := tcp.New(config.TCPAddress, config.TCPPort, t.NewConnections(), logger)
-	httpHandler := http.New(config.HTTPAddress, config.HTTPPort, t.Messages(), t.NewConnections(), logger)
+	tcpHandler := tcp.New(config.TCPAddress, config.TCPPort, logger)
+	httpHandler := http.New(config.HTTPAddress, config.HTTPPort, tcpHandler.Messages(), logger)
 
 
 	// using a run.Group to handle automatic stopping of all components of the application in
 	// the event that one of the components experiences an error.
 	var g run.Group
-	{
-		// Transporter to handle message transport
-		g.Add(
-			func() error {
-				return t.StartTransporter()
-			},
-			func(err error) {
-				t.StopTransporter()
-			},
-		)
-	}
 	{
 		// TCP listener - accepts messages via telnet connection
 		g.Add(

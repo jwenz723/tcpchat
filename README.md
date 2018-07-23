@@ -32,3 +32,8 @@ Here is an example of how to send a message using curl:
 ```
 curl -X POST http://localhost:8080/message -d "{\"sender\":\"curler\",\"message\":\"hi\"}"
 ```
+
+### Sources of Help
+
+* https://stackoverflow.com/a/18969608/3703667
+* https://stackoverflow.com/a/30838807/3703667

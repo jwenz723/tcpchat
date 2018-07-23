@@ -92,7 +92,7 @@ func TestInitLogging(t *testing.T) {
 		}()
 
 		if logger == nil {
-			t.Errorf("%s[%s] -> logger failed to initialize")
+			t.Errorf("%s[%s] -> logger failed to initialize", t.Name(), testName)
 			continue
 		}
 
