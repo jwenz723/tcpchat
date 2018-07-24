@@ -71,7 +71,7 @@ func (h *Handler) Start() error {
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
-				h.logger.WithField("error", err).Fatal("error accepting connection")
+				h.logger.WithField("error", err).Error("error accepting connection")
 			} else {
 				h.newConnections <- conn
 			}
@@ -110,12 +110,14 @@ func (h *Handler) Start() error {
 // Stop will shutdown the TCP listener
 func (h *Handler) Stop() {
 	for {
+		time.Sleep(1 * time.Millisecond)
 		if h.Ready && h.done != nil {
 			h.done <- struct {}{}
 
 			// wait for the done channel to be closed (meaning the Start() func has actually stopped running)
 			<-h.done
 			h.done = nil
+			return
 		}
 	}
 }

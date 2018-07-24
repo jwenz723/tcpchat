@@ -43,8 +43,9 @@ func TestHandler_Start(t *testing.T) {
 		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", address, port))
 		if err != nil {
 			t.Fatal(err)
+		} else if conn != nil {
+			defer conn.Close()
 		}
-		defer conn.Close()
 		reader := bufio.NewReader(conn)
 
 		// Extract entry message: Enter your name (default: Toothclover)
@@ -74,7 +75,6 @@ func TestHandler_Start(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer conn2.Close()
 		reader2 := bufio.NewReader(conn2)
 
 		// Extract entry message: Enter your name (default: Toothclover)
@@ -116,6 +116,14 @@ func TestHandler_Start(t *testing.T) {
 			t.Errorf("did not receive expected message.\n\tExpected: %#v\n\tActual: %#v", e, incoming)
 		}
 
+		conn2.Close()
+		// Extract the message indicating that conn2 disconnected
+		incoming, _ = reader.ReadString('\n')
+		e = fmt.Sprintf(".*%s: Disconnected\r\n", name2)
+		if m, _ := regexp.MatchString(e, incoming); !m {
+			t.Errorf("did not receive expected message.\n\tExpected: %#v\n\tActual: %#v", e, incoming)
+		}
+
 		h.Stop()
 	}()
 
@@ -127,43 +135,54 @@ func TestHandler_Start(t *testing.T) {
 
 func TestHandler_Stop(t *testing.T) {
 	address := ""
-	port := 6001
-
+	port := 6002
 	logger, _ := test.NewNullLogger()
 	h := New(address, port, logger)
 
-
-	// TODO: why does the way this starts/stops not pass tests when ran from CLI
 	done := make(chan struct{})
 	go func() {
+		defer close(done)
+
+		idone := make(chan struct{})
 		// Test that h.Stop successfully stops the TCP listener
 		go func() {
+			defer close(idone)
+			// wait a second to make sure h.Start() finished
+			time.Sleep(1 * time.Second)
 			h.Stop()
 		}()
 
 		err := h.Start()
 		if err != nil {
-			t.Fatalf("failed to start TCP listener at %s:%d -> %s", address, port, err)
+			t.Errorf("failed to start TCP listener at %s:%d -> %s", address, port, err)
 		}
 
-		done <- struct{}{}
+		select {
+		case <-idone:
+		case <-time.After(5 * time.Second):
+			t.Errorf("h.Stop() failed to complete within desired time")
+		}
 	}()
 
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Errorf("failed to stop within desired time")
+	case <-time.After(5 * time.Second):
+		t.Errorf("h.Start() was not stopped within desired time")
 	}
 
 	if h.Ready {
 		t.Errorf("h.Ready not set to false")
 	}
 
-	dialer := net.Dialer{Timeout: time.Duration(1 * time.Second)}
+	if h.done != nil {
+		t.Errorf("h.done not set to nil in h.Stop()")
+	}
+
+	dialer := net.Dialer{Timeout: time.Duration(2 * time.Second)}
 	conn, err := dialer.Dial("tcp", fmt.Sprintf("%s:%d", address, port))
 	if err == nil {
 		t.Errorf("connected via TCP to %s:%d after h.Stop() should have stopped the TCP listener", address, port)
-	} else {
+	} else if conn != nil {
 		conn.Close()
 	}
 }
