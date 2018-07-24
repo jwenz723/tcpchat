@@ -2,8 +2,8 @@ package main
 
 import (
 	"io/ioutil"
-	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
+	"github.com/sirupsen/logrus"
 )
 
 // Config defines a struct to match a configuration yaml file.
@@ -17,41 +17,6 @@ type Config struct {
 	TCPPort 			int 		`yaml:"TCPPort"`
 }
 
-// UnmarshalYAML overrides what happens when the yaml.Unmarshal function is executed on the Config type
-func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	type RawConfig Config
-	if err := unmarshal((*RawConfig)(c)); err != nil {
-		return err
-	}
-
-	// Set a default LogDirectory
-	if c.LogDirectory == "" {
-		c.LogDirectory = "logs"
-	}
-
-	// Ensure a proper LogLevel was provided
-	if c.LogLevel == "" {
-		c.LogLevel = "info"
-	} else {
-		_, err := logrus.ParseLevel(c.LogLevel)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Set a default port for the HTTP listener
-	if c.HTTPPort == 0 {
-		c.HTTPPort = 8080
-	}
-
-	// Set a default port for the TCP listener
-	if c.TCPPort == 0 {
-		c.TCPPort = 6000
-	}
-
-	return nil
-}
-
 // NewConfig will create a new Config instance from the specified yaml file
 func NewConfig(yamlFile string) (*Config, error) {
 	config := Config{}
@@ -63,6 +28,31 @@ func NewConfig(yamlFile string) (*Config, error) {
 	err = yaml.Unmarshal(source, &config)
 	if err != nil {
 		return nil, err
+	}
+
+	// Set a default LogDirectory
+	if config.LogDirectory == "" {
+		config.LogDirectory = "logs"
+	}
+
+	// Ensure a proper LogLevel was provided
+	if config.LogLevel == "" {
+		config.LogLevel = "info"
+	} else {
+		_, err := logrus.ParseLevel(config.LogLevel)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Set a default port for the HTTP listener
+	if config.HTTPPort == 0 {
+		config.HTTPPort = 8080
+	}
+
+	// Set a default port for the TCP listener
+	if config.TCPPort == 0 {
+		config.TCPPort = 6000
 	}
 
 	return &config, nil
