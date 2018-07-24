@@ -64,14 +64,14 @@ func TestInitLogging(t *testing.T) {
 		logLevel               string
 		jsonOutput             bool
 	}{
-		"debug-level json test":     {jsonFormatterType,logrus.DebugLevel, "{.*this is an error.*\\n{.*this is a warn.*}\\n{.*this is an info.*}\\n{.*this is a debug.*}", "inlog", "debug", true},
-		"error-level json test":     {jsonFormatterType,logrus.ErrorLevel, "this is an error", "inlog", "error", true},
-		"debug-level non-json test": {textFormatterType,logrus.DebugLevel, "time.*this is an error\"\ntime.*this is a warn\"\ntime.*this is an info\"\ntime.*this is a debug\"", "inlog", "debug", false},
-		"info-level non-json test":  {textFormatterType,logrus.InfoLevel, "time.*this is an error\"\ntime.*this is a warn\"\ntime.*this is an info\"", "inlog", "info", false},
-		"warn-level non-json test":  {textFormatterType,logrus.WarnLevel, "time.*this is an error\"\ntime.*this is a warn\"", "inlog", "warn", false},
-		"error-level non-json test": {textFormatterType,logrus.ErrorLevel, "time.*this is an error\"", "inlog", "error", false},
-		"new log dir test":          {textFormatterType,logrus.InfoLevel, "time.*this is an error\"\ntime.*this is a warn\"\ntime.*this is an info\"", "inlog\\sub", "info", false},
-		"bad log level test":        {textFormatterType,logrus.InfoLevel, "time.*this is an error\"\ntime.*this is a warn\"\ntime.*this is an info\"", "inlog", "invalid level", false},
+		"debug-level json test":     {jsonFormatterType,logrus.DebugLevel, "{.*this is an error.*\\n{.*this is a warn.*}\\n{.*this is an info.*}\\n{.*this is a debug.*}", "logs", "debug", true},
+		"error-level json test":     {jsonFormatterType,logrus.ErrorLevel, "this is an error", "logs", "error", true},
+		"debug-level non-json test": {textFormatterType,logrus.DebugLevel, "time.*this is an error\"\ntime.*this is a warn\"\ntime.*this is an info\"\ntime.*this is a debug\"", "logs", "debug", false},
+		"info-level non-json test":  {textFormatterType,logrus.InfoLevel, "time.*this is an error\"\ntime.*this is a warn\"\ntime.*this is an info\"", "logs", "info", false},
+		"warn-level non-json test":  {textFormatterType,logrus.WarnLevel, "time.*this is an error\"\ntime.*this is a warn\"", "logs", "warn", false},
+		"error-level non-json test": {textFormatterType,logrus.ErrorLevel, "time.*this is an error\"", "logs", "error", false},
+		"new log dir test":          {textFormatterType,logrus.InfoLevel, "time.*this is an error\"\ntime.*this is a warn\"\ntime.*this is an info\"", "logs\\sub", "info", false},
+		"bad log level test":        {textFormatterType,logrus.InfoLevel, "time.*this is an error\"\ntime.*this is a warn\"\ntime.*this is an info\"", "logs", "invalid level", false},
 		"stdout test":               {textFormatterType,logrus.InfoLevel, "", "", "info", false},
 	}
 
