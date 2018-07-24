@@ -2,12 +2,12 @@ package tcp
 
 import (
 	"testing"
-	"net"
 	"github.com/sirupsen/logrus/hooks/test"
 	"time"
 	"fmt"
-	"bufio"
 	"regexp"
+	"net"
+	"bufio"
 )
 
 func TestMessage_String(t *testing.T) {
@@ -132,36 +132,38 @@ func TestHandler_Stop(t *testing.T) {
 	logger, _ := test.NewNullLogger()
 	h := New(address, port, logger)
 
-	// Test that h.Stop successfully stops the TCP listener
+
+	// TODO: why does the way this starts/stops not pass tests when ran from CLI
+	done := make(chan struct{})
 	go func() {
+		// Test that h.Stop successfully stops the TCP listener
+		go func() {
+			h.Stop()
+		}()
+
 		err := h.Start()
 		if err != nil {
-			t.Errorf("failed to start TCP listener at %s:%d -> %s", address, port, err)
+			t.Fatalf("failed to start TCP listener at %s:%d -> %s", address, port, err)
 		}
+
+		done <- struct{}{}
 	}()
-	// Wait for h.Start() to do its thing or timeout after a few seconds
-	c := make(chan struct{})
-	go func() {
-		for !h.Ready && h.done != nil {
-			time.Sleep(1 * time.Millisecond)
-		}
-		c <- struct{}{}
-	}()
+
 	select {
-	case <-c:
-	case <-time.After(3 * time.Second):
-	}
-	h.Stop()
-
-	if h.done != nil {
-		t.Errorf("h.done not set to nil")
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Errorf("failed to stop within desired time")
 	}
 
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", address, port))
+	if h.Ready {
+		t.Errorf("h.Ready not set to false")
+	}
+
+	dialer := net.Dialer{Timeout: time.Duration(1 * time.Second)}
+	conn, err := dialer.Dial("tcp", fmt.Sprintf("%s:%d", address, port))
 	if err == nil {
 		t.Errorf("connected via TCP to %s:%d after h.Stop() should have stopped the TCP listener", address, port)
-	}
-	if conn != nil {
+	} else {
 		conn.Close()
 	}
 }

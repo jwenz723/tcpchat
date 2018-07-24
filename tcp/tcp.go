@@ -98,7 +98,10 @@ func (h *Handler) Start() error {
 
 		case <-h.done:
 			h.logger.Info("stopping TCP listener...")
-			listener.Close()
+			err := listener.Close()
+			if err != nil {
+				return err
+			}
 			return nil
 		}
 	}
@@ -106,12 +109,14 @@ func (h *Handler) Start() error {
 
 // Stop will shutdown the TCP listener
 func (h *Handler) Stop() {
-	if h.Ready && h.done != nil {
-		h.done <- struct {}{}
+	for {
+		if h.Ready && h.done != nil {
+			h.done <- struct {}{}
 
-		// wait for the done channel to be closed (meaning the Start() func has actually stopped running)
-		<-h.done
-		h.done = nil
+			// wait for the done channel to be closed (meaning the Start() func has actually stopped running)
+			<-h.done
+			h.done = nil
+		}
 	}
 }
 

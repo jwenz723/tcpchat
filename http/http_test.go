@@ -3,7 +3,6 @@ package http
 import (
 	"testing"
 	"github.com/sirupsen/logrus/hooks/test"
-	"github.com/jwenz723/telchat/transporter"
 	"net/http"
 	"fmt"
 	"bytes"
@@ -11,6 +10,7 @@ import (
 	"io/ioutil"
 	"encoding/json"
 	"net"
+	"github.com/jwenz723/telchat/tcp"
 )
 
 func TestNew(t *testing.T) {
@@ -18,8 +18,8 @@ func TestNew(t *testing.T) {
 	port := 8080
 	logger, _ := test.NewNullLogger()
 
-	tran := transporter.NewTransporter(logger)
-	h := New(address, port, tran.Messages(), tran.NewConnections(), logger)
+	th := tcp.New("", 6000, logger)
+	h := New(address, port, th.Messages(), logger)
 
 	if h == nil {
 		t.Errorf("received null handler from New()")
@@ -30,9 +30,9 @@ func TestHandler_Start(t *testing.T) {
 	address := ""
 	port := 8080
 	logger, _ := test.NewNullLogger()
-	tran := transporter.NewTransporter(logger)
-	h := New(address, port, tran.Messages(), tran.NewConnections(), logger)
-	mes := transporter.Message{"in TestHandler_Start()","my name"}
+	th := tcp.New("", 6000, logger)
+	h := New(address, port, th.Messages(), logger)
+	mes := tcp.Message{"in TestHandler_Start()","my name"}
 	j, err := json.Marshal(mes)
 	if err != nil {
 		t.Errorf("failed to marshal Message (%#v) to JSON -> %s", mes, err)
@@ -113,9 +113,9 @@ func TestHandler_Stop(t *testing.T) {
 	address := ""
 	port := 8081
 	logger, _ := test.NewNullLogger()
-	tran := transporter.NewTransporter(logger)
-	h := New(address, port, tran.Messages(), tran.NewConnections(), logger)
-	mes := transporter.Message{"in TestHandler_Stop()","my name"}
+	th := tcp.New("", 6000, logger)
+	h := New(address, port, th.Messages(), logger)
+	mes := tcp.Message{"in TestHandler_Stop()","my name"}
 	j, err := json.Marshal(mes)
 	if err != nil {
 		t.Errorf("failed to marshal Message (%#v) to JSON -> %s", mes, err)
