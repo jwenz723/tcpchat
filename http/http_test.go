@@ -38,74 +38,77 @@ func TestHandler_Start(t *testing.T) {
 		t.Errorf("failed to marshal Message (%#v) to JSON -> %s", mes, err)
 	}
 
+	// define a channel that can be blocked until h.Start() has completed
+	done := make(chan struct{})
+	eCh := make(chan struct{})
+	h.startDone = func() {
+		done <- struct{}{}
+	}
+	defer func() {
+		h.startDone = func() {}
+	}()
+
 	// Start the http listener
 	go func() {
 		err = h.Start()
 		if err != nil {
+			eCh <- struct{}{}
 			t.Fatalf("failed to start HTTP listener at %s:%d -> %s", address, port, err)
 		}
 	}()
 
-	// Wait for h.Start() to do its thing or timeout after a few seconds
-	c := make(chan struct{})
-	go func() {
-		for !h.Ready && h.done != nil {
-			time.Sleep(1 * time.Millisecond)
-		}
-		c <- struct{}{}
-	}()
+	// wait until h.Start() has completed or experienced an error
 	select {
-	case <-c:
-	case <-time.After(3 * time.Second):
-	}
+	case <-done:
+		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", address, port))
+		if err == nil {
+			conn.Close()
+			if !h.Ready {
+				t.Errorf("listener at %s:%d is running but h.Ready is not set to true", address, port)
+			}
 
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", address, port))
-	if err == nil {
-		conn.Close()
-		if !h.Ready {
-			t.Errorf("listener at %s:%d is running but h.Ready is not set to true", address, port)
-		}
-
-		if h.done == nil {
-			t.Errorf("listener at %s:%d is running but h.done is set to nil", address, port)
-		}
-	}
-
-	if h.Ready {
-		// Test POSTing a Message
-		a := fmt.Sprintf("http://%s:%d/message", address, port)
-		timeout := time.Duration(5 * time.Second)
-		client := http.Client{
-			Timeout: timeout,
-		}
-		resp, err := client.Post(a, "application/json", bytes.NewBuffer(j))
-		if err != nil {
-			t.Fatalf("failed to POST Message -> %s", err)
-		} else {
-			defer resp.Body.Close()
-			body, _ := ioutil.ReadAll(resp.Body)
-			e := "sent\n"
-			if string(body) != e {
-				t.Errorf("expected response (%#v) did not match actual response (%#v) from POST %s", e, string(body), a)
+			if h.done == nil {
+				t.Errorf("listener at %s:%d is running but h.done is set to nil", address, port)
 			}
 		}
 
-		// Test that the HTTP POST above resulted in a Message being sent through the
-		// h.messages channel according to the /message handler function
-		select {
-		case m := <-h.messages:
-			// test that the Message received has the expected content
-			if m.Sender != mes.Sender {
-				t.Errorf("expected Sender (%s) did not match actual Sender (%s) from messages channel", mes.Sender, m.Sender)
+		if h.Ready {
+			// Test POSTing a Message
+			a := fmt.Sprintf("http://%s:%d/message", address, port)
+			timeout := time.Duration(5 * time.Second)
+			client := http.Client{
+				Timeout: timeout,
 			}
-			if m.Message != mes.Message {
-				t.Errorf("expected Message (%s) did not match actual Message (%s) from messages channel", mes.Message, m.Message)
+			resp, err := client.Post(a, "application/json", bytes.NewBuffer(j))
+			if err != nil {
+				t.Fatalf("failed to POST Message -> %s", err)
+			} else {
+				defer resp.Body.Close()
+				body, _ := ioutil.ReadAll(resp.Body)
+				e := "sent\n"
+				if string(body) != e {
+					t.Errorf("expected response (%#v) did not match actual response (%#v) from POST %s", e, string(body), a)
+				}
 			}
-		case <-time.After(1 * time.Second):
-			t.Errorf("failed to receive Message from messages channel")
-		}
 
-		h.Stop()
+			// Test that the HTTP POST above resulted in a Message being sent through the
+			// h.messages channel according to the /message handler function
+			select {
+			case m := <-h.messages:
+				// test that the Message received has the expected content
+				if m.Sender != mes.Sender {
+					t.Errorf("expected Sender (%s) did not match actual Sender (%s) from messages channel", mes.Sender, m.Sender)
+				}
+				if m.Message != mes.Message {
+					t.Errorf("expected Message (%s) did not match actual Message (%s) from messages channel", mes.Message, m.Message)
+				}
+			case <-time.After(1 * time.Second):
+				t.Errorf("failed to receive Message from messages channel")
+			}
+
+			h.Stop()
+		}
+	case <-eCh:
 	}
 }
 
@@ -121,31 +124,29 @@ func TestHandler_Stop(t *testing.T) {
 		t.Errorf("failed to marshal Message (%#v) to JSON -> %s", mes, err)
 	}
 
-	success := true
+	// define a channel that can be blocked until h.Start() has completed
+	done := make(chan struct{})
+	eCh := make(chan struct{})
+	h.startDone = func() {
+		done <- struct{}{}
+	}
+	defer func() {
+		h.startDone = func() {}
+	}()
+
 	go func() {
 		err = h.Start()
 		if err != nil {
-			success = false
+			close(eCh)
 			t.Fatalf("failed to start HTTP listener at %s:%d -> %s", address, port, err)
 		}
 	}()
 
-	// Wait for h.Start() to do its thing or timeout after a few seconds
-	c := make(chan struct{})
-	go func() {
-		for !h.Ready && h.done != nil {
-			time.Sleep(1 * time.Millisecond)
-		}
-		c <- struct{}{}
-	}()
+	// wait until h.Start() has completed or experienced an error
 	select {
-	case <-c:
+	case <-done:
 		h.Stop()
-	case <-time.After(3 * time.Second):
-	}
 
-
-	if success {
 		if !h.Ready {
 			// Test that POSTing a Message fails as expected
 			timeout := time.Duration(5 * time.Second)
@@ -164,5 +165,6 @@ func TestHandler_Stop(t *testing.T) {
 		if h.done != nil {
 			t.Errorf("h.done not set to nil")
 		}
+	case <-eCh:
 	}
 }

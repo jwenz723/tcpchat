@@ -52,7 +52,7 @@ func main() {
 		)
 	}
 	{
-		// Web listener - accepts messages via REST api
+		// HTTP listener - accepts messages via REST api
 		g.Add(
 			func() error {
 				if err := httpHandler.Start(); err != nil {

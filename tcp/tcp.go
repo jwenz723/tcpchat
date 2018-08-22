@@ -37,6 +37,7 @@ type Handler struct {
 	newConnections 		chan net.Conn
 	port 				int
 	Ready				bool // Indicates that the http listener is ready to accept connections
+	startDone	   		func() // a callback that can be defined to do something once Start() has done all its work
 }
 
 // New will create a new Handler for starting a new TCP listener
@@ -82,6 +83,7 @@ func (h *Handler) Start() error {
 		"address": listener.Addr(),
 	}).Info("TCP listener accepting connections")
 
+	h.startDone()
 	for {
 		select {
 		// Accept new clients
@@ -266,6 +268,8 @@ func (h *Handler) iterateClients() <-chan net.Conn {
 
 // numClients will return the number of keys within h.clients
 func (h *Handler) numClients() int {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
 	return len(h.clients)
 }
 

@@ -19,6 +19,7 @@ type Handler struct {
 	port           int
 	Ready          bool // Indicates that the http listener is ready to accept connections
 	router         *httprouter.Router
+	startDone	   func() // a callback that can be defined to do something once Start() has done all its work
 }
 
 // New initializes a new http Handler
@@ -58,6 +59,7 @@ func (h *Handler) Start() error {
 		"address": listener.Addr(),
 	}).Info("HTTP listener accepting connections")
 
+	h.startDone()
 	for {
 		select {
 		case e := <-errCh:
