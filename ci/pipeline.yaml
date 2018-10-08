@@ -1,27 +1,34 @@
----
-jobs:
-- name: build-docker-image
-  public: true
-  serial: true
-  plan:
-  - get: telchat
-    trigger: true
-  - put: go-docker-image
-    params:
-      build: telchat/ci
-
 resources:
 - name: telchat
   type: git
   source:
-    uri: ((github-uri))
+    uri: https://github.com/jwenz723/telchat.git
     branch: master
     private_key: ((publishing-outputs-private-key))
 
-- name: go-docker-image
+- name: telchat-docker-image
   type: docker-image
   source:
     email: ((dockerhub-email))
     username: ((dockerhub-username))
     password: ((dockerhub-password))
     repository: ((dockerhub-username))/telchat
+
+jobs:
+- name: publish
+  public: true
+  plan:
+  - get: telchat
+  - task: run
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: golang
+      run:
+        path: ci/tests.sh
+  - put: telchat-docker-image
+    params:
+      build: telchat/ci
+
