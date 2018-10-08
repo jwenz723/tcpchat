@@ -59,7 +59,10 @@ func (h *Handler) Start() error {
 		"address": listener.Addr(),
 	}).Info("HTTP listener accepting connections")
 
-	h.startDone()
+	if h.startDone != nil {
+		h.startDone()
+	}
+
 	for {
 		select {
 		case e := <-errCh:

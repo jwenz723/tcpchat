@@ -83,7 +83,10 @@ func (h *Handler) Start() error {
 		"address": listener.Addr(),
 	}).Info("TCP listener accepting connections")
 
-	h.startDone()
+	if h.startDone != nil {
+		h.startDone()
+	}
+
 	for {
 		select {
 		// Accept new clients
