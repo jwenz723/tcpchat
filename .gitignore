@@ -4,3 +4,4 @@ config.yml
 *.png
 logs/*
 cover.out
+ci/credentials.yaml
