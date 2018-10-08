@@ -3,76 +3,55 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:0e5b66364c5559101d270c0ed5f0196ca6ce910cf89247b9315c6305f15f29d5"
   name = "github.com/Pallinder/go-randomdata"
   packages = ["."]
-  pruneopts = "UT"
   revision = "15df0648130a623e418886f81b2aaecd0a00547b"
 
 [[projects]]
-  digest = "1:ccfa094742ce1c97fd3f6481e1bf98f3d9862510eee2bc0eb56e2745396bd330"
   name = "github.com/julienschmidt/httprouter"
   packages = ["."]
-  pruneopts = "UT"
   revision = "8c199fb6259ffc1af525cc3ad52ee60ba8359669"
   version = "v1.1"
 
 [[projects]]
-  digest = "1:9ec6cf1df5ad1d55cf41a43b6b1e7e118a91bade4f68ff4303379343e40c0e25"
   name = "github.com/oklog/run"
   packages = ["."]
-  pruneopts = "UT"
   revision = "4dadeb3030eda0273a12382bb2348ffc7c9d1a39"
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:6095dbcf5493585749dce72f62e5842a50288a4f9ca00ea706d72e5579e2bb42"
   name = "github.com/sirupsen/logrus"
   packages = [
     ".",
-    "hooks/test",
+    "hooks/test"
   ]
-  pruneopts = "UT"
   revision = "c155da19408a8799da419ed3eeb0cb5db0ad5dbc"
   version = "v1.0.5"
 
 [[projects]]
   branch = "master"
-  digest = "1:3f3a05ae0b95893d90b9b3b5afdb79a9b3d96e4e36e099d841ae602e4aca0da8"
   name = "golang.org/x/crypto"
   packages = ["ssh/terminal"]
-  pruneopts = "UT"
   revision = "a2144134853fc9a27a7b1e3eb4f19f1a76df13c9"
 
 [[projects]]
   branch = "master"
-  digest = "1:72d6244a51be9611f08994aca19677fcc31676b3e7b742c37e129e6ece4ad8fc"
   name = "golang.org/x/sys"
   packages = [
     "unix",
-    "windows",
+    "windows"
   ]
-  pruneopts = "UT"
   revision = "ac767d655b305d4e9612f5f6e33120b9176c4ad4"
 
 [[projects]]
-  digest = "1:342378ac4dcb378a5448dd723f0784ae519383532f5e70ade24132c4c8693202"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
-  pruneopts = "UT"
   revision = "5420a8b6744d3b0345ab293f6fcba19c978f1183"
   version = "v2.2.1"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  input-imports = [
-    "github.com/Pallinder/go-randomdata",
-    "github.com/julienschmidt/httprouter",
-    "github.com/oklog/run",
-    "github.com/sirupsen/logrus",
-    "github.com/sirupsen/logrus/hooks/test",
-    "gopkg.in/yaml.v2",
-  ]
+  inputs-digest = "8c5ecaa74861adfa1ca74a7f83989fb3f4cb2684027bcbcca7a1e46f5cbd5ff3"
   solver-name = "gps-cdcl"
   solver-version = 1
