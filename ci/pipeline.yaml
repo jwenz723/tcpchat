@@ -32,8 +32,9 @@ jobs:
         args:
           - -exc
           - |
-            chmod +x telchat/ci/tests.sh
-            ./telchat/ci/tests.sh
+            chmod +x telchat/ci/*.sh
+            ./telchat/ci/build.sh
+            ls -laR
 
 #  - put: telchat-docker-image
 #    params:
