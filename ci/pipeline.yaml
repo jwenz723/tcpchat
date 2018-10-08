@@ -4,24 +4,24 @@ jobs:
   public: true
   serial: true
   plan:
-  - get: git-repo
+  - get: telchat
     trigger: true
-  - put: docker-image
+  - put: go-docker-image
     params:
-      build: git-repo/ci
+      build: telchat/ci
 
 resources:
-- name: git-repo
+- name: telchat
   type: git
   source:
     uri: ((github-uri))
     branch: master
     private_key: ((publishing-outputs-private-key))
 
-- name: docker-image
+- name: go-docker-image
   type: docker-image
   source:
     email: ((dockerhub-email))
     username: ((dockerhub-username))
     password: ((dockerhub-password))
-    repository: ((dockerhub-repository))
+    repository: ((dockerhub-username))/telchat
