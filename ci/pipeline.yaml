@@ -6,13 +6,13 @@ resources:
     branch: master
     private_key: ((publishing-outputs-private-key))
 
-- name: telchat-docker-image
-  type: docker-image
-  source:
-    email: ((dockerhub-email))
-    username: ((dockerhub-username))
-    password: ((dockerhub-password))
-    repository: ((dockerhub-username))/telchat
+#- name: telchat-docker-image
+#  type: docker-image
+#  source:
+#    email: ((dockerhub-email))
+#    username: ((dockerhub-username))
+#    password: ((dockerhub-password))
+#    repository: ((dockerhub-username))/telchat
 
 jobs:
 - name: publish
@@ -28,7 +28,13 @@ jobs:
       inputs:
         - name: telchat
       run:
-        path: telchat/ci/tests.sh
+        path: sh
+        args:
+          - -exc
+          - |
+            chmod +x telchat/ci/tests.sh
+            ./telchat/ci/tests.sh
+
 #  - put: telchat-docker-image
 #    params:
 #      build: telchat/ci
