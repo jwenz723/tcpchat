@@ -4,7 +4,7 @@ HTTPAddress:
 # HTTPPort is the port that the HTTP listener will bind to (default: '')
 HTTPPort:
 
-# LogDirectory sets the directory where logs will be written to (default: 'logs')
+# LogDirectory sets the directory where logs will be written to (default: '' - this will send logging to stdout)
 LogDirectory:
 
 # LogJSON can be used to set the output of logs to JSON format (default: false)

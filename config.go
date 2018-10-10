@@ -30,11 +30,6 @@ func NewConfig(yamlFile string) (*Config, error) {
 		return nil, err
 	}
 
-	// Set a default LogDirectory
-	if config.LogDirectory == "" {
-		config.LogDirectory = "logs"
-	}
-
 	// Ensure a proper LogLevel was provided
 	if config.LogLevel == "" {
 		config.LogLevel = "info"

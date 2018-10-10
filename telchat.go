@@ -10,11 +10,15 @@ import (
 	"github.com/oklog/run"
 	"github.com/jwenz723/telchat/http"
 	"github.com/jwenz723/telchat/tcp"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // Source of inspiration for a TCP chat app: https://github.com/kljensen/golang-chat
 func main() {
-	config, err := NewConfig("config.yml")
+	configFile := kingpin.Flag("config", "path to yaml config file").Default("config.yml").String()
+	kingpin.Parse()
+
+	config, err := NewConfig(*configFile)
 	if err != nil {
 		panic(fmt.Errorf("error parsing config.yml: %s", err))
 	}
