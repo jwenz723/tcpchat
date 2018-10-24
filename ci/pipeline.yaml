@@ -28,7 +28,7 @@ jobs:
       inputs:
         - name: telchat
       run:
-        path: telchat/ci/tests.sh
+        path: ./telchat/ci/tests.sh
 #        path: sh
 #        args:
 #          - -exc
