@@ -27,9 +27,8 @@ jobs:
         source: {repository: golang, tag: 1.10.1}
       inputs:
         - name: telchat
-          path: /go/src/github.com/jwenz723/telchat
       run:
-        path: /go/src/github.com/jwenz723/telchat/ci/tests.sh
+        path: telchat/ci/tests.sh
 #        path: sh
 #        args:
 #          - -exc
