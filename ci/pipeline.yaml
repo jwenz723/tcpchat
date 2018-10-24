@@ -24,12 +24,12 @@ jobs:
       platform: linux
       image_resource:
         type: docker-image
-        source: {repository: golang, tag: 1.11.1-alpine}
+        source: {repository: golang, tag: 1.11.1}
       inputs:
         - name: telchat
-          path: gopath/src/github.com/jwenz723/telchat
+          path: $GOPATH/src/github.com/jwenz723/telchat
       run:
-        path: ./gopath/src/github.com/jwenz723/telchat/ci/tests.sh
+        path: ./$GOPATH/src/github.com/jwenz723/telchat/ci/tests.sh
 #        path: sh
 #        args:
 #          - -exc
