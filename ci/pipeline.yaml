@@ -24,7 +24,7 @@ jobs:
       platform: linux
       image_resource:
         type: docker-image
-        source: {repository: golang, tag: 1.11.1}
+        source: {repository: golang, tag: 1.10.1}
       inputs:
         - name: telchat
           path: $GOPATH/src/github.com/jwenz723/telchat
