@@ -36,9 +36,9 @@ jobs:
              ls -Rla
 #            chmod +x telchat/ci/*.sh
 #            ./telchat/ci/tests.sh
-#  - put: telchat-docker-image
-#    params:
-#      build: telchat
+  - put: telchat-docker-image
+    params:
+      build: telchat
 
 
 
