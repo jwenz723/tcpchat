@@ -29,11 +29,12 @@ jobs:
         - name: telchat
           path: gopath/src/github.com/jwenz723/telchat
       run:
-        path: sh
-        args:
-          - -exc
-          - |
-             ls -Rla
+        path: ./gopath/src/github.com/jwenz723/telchat/ci/tests.sh
+#        path: sh
+#        args:
+#          - -exc
+#          - |
+#             ls -Rla
 #            chmod +x telchat/ci/*.sh
 #            ./telchat/ci/tests.sh
   - put: telchat-docker-image
